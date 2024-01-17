@@ -80,16 +80,16 @@ fn clean_up(register_name: &str) -> std::io::Result<()> {
             fs::remove_dir_all("logs/*")?;
         }
 
-        println!("\nStopped running processes");
+        println!("Stopped running processes");
     } else {
-        println!("\nNo local database found. Continuing...");
+        println!("No local database found. Continuing...");
     }
 
     Ok(())
 }
 
 fn drop_database(register_name: &str) -> std::io::Result<()> {
-    println!("\nStarting to drop database...");
+    println!("Starting to drop database...");
 
     let mysql_drop_db = env::var("MYSQL_DROP_DB").expect("MYSQL_DROP_DB must be set");
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_ok() {
@@ -107,7 +107,7 @@ fn drop_database(register_name: &str) -> std::io::Result<()> {
     }
 
     if fs::metadata("mysql/data").is_ok() {
-        println!("\nDropping local database...");
+        println!("Dropping local database...");
         fs::remove_dir_all("mysql/data")?;
     }
 
