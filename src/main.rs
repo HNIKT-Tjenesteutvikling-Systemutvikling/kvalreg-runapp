@@ -49,24 +49,36 @@ fn clean_up(register_name: &str) -> std::io::Result<()> {
         thread::sleep(Duration::from_secs(5));
         println!("\n\n\n");
 
-        fs::remove_file(format!("mysql/.my.cnf"))?;
-        fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
-        fs::remove_file(format!("target/{}.war", register_name))?;
-        fs::remove_dir_all(format!("target/{}", register_name))?;
-        fs::remove_file(format!(
-            "{}/webapps/{}.war",
-            env::var("CATALINA_HOME").unwrap(),
-            register_name
-        ))?;
-        fs::remove_dir_all(format!(
-            "{}/webapps/{}",
-            env::var("CATALINA_HOME").unwrap(),
-            register_name
-        ))?;
-        fs::remove_dir_all(format!("{}/bin/src/*", env::var("CATALINA_HOME").unwrap()))?;
-        fs::remove_dir_all(format!("{}/logs/*", env::var("CATALINA_HOME").unwrap()))?;
-        fs::remove_dir_all("jdk/*")?;
-        fs::remove_dir_all("logs/*")?;
+        if fs::metadata("mysql/.my.cnf").is_ok() {
+            fs::remove_file("mysql/.my.cnf")?;
+        }
+        if fs::metadata(format!("{}/.my.cnf", env::var("HOME").unwrap())).is_ok() {
+            fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
+        }
+        if fs::metadata(format!("target/{}.war", register_name)).is_ok() {
+            fs::remove_file(format!("target/{}.war", register_name))?;
+        }
+        if fs::metadata(format!("target/{}", register_name)).is_ok() {
+            fs::remove_dir_all(format!("target/{}", register_name))?;
+        }
+        if fs::metadata(format!("{}/webapps/{}.war", env::var("CATALINA_HOME").unwrap(), register_name)).is_ok() {
+            fs::remove_file(format!("{}/webapps/{}.war", env::var("CATALINA_HOME").unwrap(), register_name))?;
+        }
+        if fs::metadata(format!("{}/webapps/{}", env::var("CATALINA_HOME").unwrap(), register_name)).is_ok() {
+            fs::remove_dir_all(format!("{}/webapps/{}", env::var("CATALINA_HOME").unwrap(), register_name))?;
+        }
+        if fs::metadata(format!("{}/bin/src/*", env::var("CATALINA_HOME").unwrap())).is_ok() {
+            fs::remove_dir_all(format!("{}/bin/src/*", env::var("CATALINA_HOME").unwrap()))?;
+        }
+        if fs::metadata(format!("{}/logs/*", env::var("CATALINA_HOME").unwrap())).is_ok() {
+            fs::remove_dir_all(format!("{}/logs/*", env::var("CATALINA_HOME").unwrap()))?;
+        }
+        if fs::metadata("jdk/*").is_ok() {
+            fs::remove_dir_all("jdk/*")?;
+        }
+        if fs::metadata("logs/*").is_ok() {
+            fs::remove_dir_all("logs/*")?;
+        }
 
         println!("Stopped running processes");
     } else {
