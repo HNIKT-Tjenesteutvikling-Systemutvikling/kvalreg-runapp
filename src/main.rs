@@ -61,7 +61,11 @@ fn clean_up(register_name: &str) -> std::io::Result<()> {
         ];
         for path in &paths_to_remove {
             if path.exists() {
-                fs::remove_dir_all(path)?;
+                if path.is_dir() {
+                    fs::remove_dir_all(path)?;
+                } else {
+                    fs::remove_file(path)?;
+                }
             }
         }
 
