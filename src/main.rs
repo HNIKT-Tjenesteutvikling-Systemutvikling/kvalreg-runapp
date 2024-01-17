@@ -378,6 +378,8 @@ fn main() -> std::io::Result<()> {
     let register: Register = from_str(output_str).expect("Failed to parse JSON");
     let register_name = Arc::new(register.register_name);
 
+    let mut handles = vec![];
+
     if let Some(_matches) = matches.subcommand_matches("local") {
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat")
@@ -388,13 +390,12 @@ fn main() -> std::io::Result<()> {
         start_database()?;
 
         let register_name_clone = Arc::clone(&register_name);
-        let compile_maven_handle = thread::spawn(move || {
+        let handle = thread::spawn(move || {
             compile_maven().unwrap();
             start_tomcat(&*register_name_clone).unwrap();
         });
 
-        compile_maven_handle.join().unwrap();
-        println!("{}", "Finished setting up environment for local...".green());
+        handles.push(handle);
     } else if let Some(_matches) = matches.subcommand_matches("code") {
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat")
@@ -404,16 +405,12 @@ fn main() -> std::io::Result<()> {
         setup_external_database(&*register_name)?;
 
         let register_name_clone = Arc::clone(&register_name);
-        let compile_maven_handle = thread::spawn(move || {
+        let handle = thread::spawn(move || {
             compile_maven().unwrap();
             start_tomcat(&*register_name_clone).unwrap();
         });
 
-        compile_maven_handle.join().unwrap();
-        println!(
-            "{}",
-            "Finished setting up environment for VScode...".green()
-        );
+        handles.push(handle);
     } else if let Some(_matches) = matches.subcommand_matches("docker") {
         println!("{}", "Stopping running services...".red());
         Command::new("docker-compose")
@@ -425,7 +422,7 @@ fn main() -> std::io::Result<()> {
         start_database()?;
 
         let register_name_clone = Arc::clone(&register_name);
-        let compile_maven_handle = thread::spawn(move || {
+        let handle = thread::spawn(move || {
             compile_maven().unwrap();
             Command::new("docker")
                 .arg("build")
@@ -435,17 +432,7 @@ fn main() -> std::io::Result<()> {
                 .expect("Failed to execute command");
         });
 
-        compile_maven_handle.join().unwrap();
-        println!("{}", "Starting services...".blue());
-        Command::new("docker-compose")
-            .arg("up")
-            .arg("-d")
-            .status()
-            .expect("Failed to execute command");
-        println!(
-            "{}",
-            "Finished setting up environment for Docker...".green()
-        );
+        handles.push(handle);
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
         clean_up(&*register_name)?;
         std::process::exit(0);
@@ -458,20 +445,16 @@ fn main() -> std::io::Result<()> {
         setup_external_database(&*register_name)?;
 
         let register_name_clone = Arc::clone(&register_name);
-        let compile_maven_handle = thread::spawn(move || {
+        let handle = thread::spawn(move || {
             compile_maven().unwrap();
             copy_db_files().unwrap();
         });
 
-        compile_maven_handle.join().unwrap();
-        println!(
-            "{}",
-            "Finnished setting up environment for Intellij...".red()
-        );
-        println!(
-            "{}",
-            "Start the tomcat server from inside Intellij...".blue()
-        );
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
     }
 
     Ok(())
