@@ -18,10 +18,15 @@ struct Register {
 }
 
 fn remove_if_exists(path: &str) -> io::Result<()> {
-    match fs::remove_dir_all(path) {
-        Ok(()) => Ok(()),
-        Err(ref e) if e.kind() == ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(e),
+    let path = Path::new(path);
+    if path.exists() {
+        if path.is_dir() {
+            fs::remove_dir_all(path)
+        } else {
+            fs::remove_file(path)
+        }
+    } else {
+        Ok(())
     }
 }
 
