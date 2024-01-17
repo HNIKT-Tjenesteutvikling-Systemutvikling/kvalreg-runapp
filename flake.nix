@@ -64,6 +64,7 @@
           name = "runapp-dev";
           buildInputs = with pkgs; [
             rustc
+            rustfmt
             cargo
             rust-analyzer
           ];

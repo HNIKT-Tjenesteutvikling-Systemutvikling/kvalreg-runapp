@@ -1,15 +1,14 @@
+use clap::App;
+use colored::*;
 use serde::Deserialize;
 use serde_json::from_str;
 use std::env;
-use std::path::Path;
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::str;
 use std::thread;
 use std::time::Duration;
-use std::str;
-use clap::App;
-use colored::*;
-use std::io::{self, ErrorKind};
 
 #[derive(Deserialize)]
 struct Register {
@@ -17,62 +16,54 @@ struct Register {
     register_name: String,
 }
 
-fn remove_if_exists(path: &str) -> io::Result<()> {
-    let path = Path::new(path);
-    if path.exists() {
-        if path.is_dir() {
-            fs::remove_dir_all(path)
-        } else {
-            fs::remove_file(path)
-        }
-    } else {
-        Ok(())
-    }
-}
-
-fn clean_up(register_name: &str) -> io::Result<()> {
+fn clean_up(register_name: &str) -> std::io::Result<()> {
     println!("{}", "Cleaning up and stopping services...".bright_blue());
-    Command::new("stop_tomcat")
-        .status()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+    Command::new("stop_tomcat").output()?;
 
-    Command::new("docker-compose")
-        .arg("down")
-        .status()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+    Command::new("docker-compose").arg("down").output()?;
 
     println!("{}", "Cleaning up and stopping MySQL...".yellow());
-    if fs::metadata("mysql/data").is_ok() {
-        if fs::metadata("mysql/socket.lock").is_ok() {
-            Command::new("stop_mysql")
-                .status()
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+    if Path::new("mysql/data").exists() {
+        if Path::new("mysql/socket.lock").exists() {
+            Command::new("stop_mysql").output()?;
 
-            let output = Command::new("pgrep")
-                .arg("mysqld")
-                .output()
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            let output = Command::new("pgrep").arg("mysqld").output()?;
             if !output.stdout.is_empty() {
-                Command::new("pkill")
-                    .arg("mysqld")
-                    .status()
-                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+                Command::new("pkill").arg("mysqld").output()?;
             }
         }
 
-        println!("{}", "\nAwaiting MySQL shutdown...\n".red());
+        println!("{}", "\nAwaiting MySQL shutdown...".red());
         thread::sleep(Duration::from_secs(5));
-
-        remove_if_exists("mysql/.my.cnf")?;
-        remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
-        remove_if_exists(&format!("target/{}.war", register_name))?;
-        remove_if_exists(&format!("target/{}", register_name))?;
-        remove_if_exists(&format!("{}/webapps/{}.war", env::var("CATALINA_HOME").unwrap(), register_name))?;
-        remove_if_exists(&format!("{}/webapps/{}", env::var("CATALINA_HOME").unwrap(), register_name))?;
-        remove_if_exists(&format!("{}/bin/src/*", env::var("CATALINA_HOME").unwrap()))?;
-        remove_if_exists(&format!("{}/logs/*", env::var("CATALINA_HOME").unwrap()))?;
-        remove_if_exists("jdk/*")?;
-        remove_if_exists("logs/*")?;
+        let home_dir =
+            env::var("HOME").map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let catalina_home = env::var("CATALINA_HOME")
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let paths_to_remove: Vec<PathBuf> = vec![
+            Path::new("mysql/.my.cnf").to_path_buf(),
+            Path::new(&home_dir).join(".my.cnf"),
+            Path::new("target")
+                .join(format!("{}.war", register_name))
+                .to_path_buf(),
+            Path::new("target").join(register_name).to_path_buf(),
+            Path::new(&catalina_home)
+                .join("webapps")
+                .join(format!("{}.war", register_name))
+                .to_path_buf(),
+            Path::new(&catalina_home)
+                .join("webapps")
+                .join(register_name)
+                .to_path_buf(),
+            Path::new(&catalina_home).join("bin/src/*").to_path_buf(),
+            Path::new(&catalina_home).join("logs/*").to_path_buf(),
+            Path::new("jdk/*").to_path_buf(),
+            Path::new("logs/*").to_path_buf(),
+        ];
+        for path in &paths_to_remove {
+            if path.exists() {
+                fs::remove_dir_all(path)?;
+            }
+        }
 
         println!("{}", "Stopped running processes".red());
     } else {
@@ -82,7 +73,7 @@ fn clean_up(register_name: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn drop_database(register_name: &str) -> io::Result<()> {
+fn drop_database(register_name: &str) -> std::io::Result<()> {
     println!("{}", "Starting to drop database...".bright_blue());
 
     let mysql_drop_db = env::var("MYSQL_DROP_DB").expect("MYSQL_DROP_DB must be set");
@@ -92,40 +83,57 @@ fn drop_database(register_name: &str) -> io::Result<()> {
             .arg("<")
             .arg(&mysql_drop_db)
             .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .expect("Failed to execute command");
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        remove_if_exists(&format!("mysql/{}.sql", register_name))?;
+        if fs::metadata(format!("mysql/{}.sql", register_name)).is_ok() {
+            fs::remove_file(format!("mysql/{}.sql", register_name))?;
+        }
     }
 
-    remove_if_exists("mysql/data")?;
+    if fs::metadata("mysql/data").is_ok() {
+        println!("{}", "Dropping local database...".yellow());
+        fs::remove_dir_all("mysql/data")?;
+    }
 
     let home_dir = env::var("HOME").unwrap();
-    remove_if_exists("mysql/.my.cnf")?;
-    remove_if_exists(&format!("{}/.my.cnf", home_dir))?;
+    if fs::metadata("mysql/.my.cnf").is_ok() {
+        fs::remove_file("mysql/.my.cnf")?;
+        if fs::metadata(format!("{}/.my.cnf", home_dir)).is_ok() {
+            fs::remove_file(format!("{}/.my.cnf", home_dir))?;
+        }
+    } else if fs::metadata(format!("{}/.my.cnf", home_dir)).is_ok() {
+        fs::remove_file(format!("{}/.my.cnf", home_dir))?;
+    }
 
     let catalina_home = env::var("CATALINA_HOME").unwrap();
-    remove_if_exists(&format!("{}/bin/src/*", catalina_home))?;
-    remove_if_exists(&format!("{}/logs/*", catalina_home))?;
-    remove_if_exists(&format!("{}/webapps/*", catalina_home))?;
-    remove_if_exists("logs/*")?;
-
+    if fs::metadata(format!("{}/bin/src", catalina_home)).is_ok() {
+        fs::remove_dir_all(format!("{}/bin/src/*", catalina_home))?;
+        fs::remove_dir_all(format!("{}/logs/*", catalina_home))?;
+        fs::remove_dir_all(format!("{}/webapps/*", catalina_home))?;
+        if fs::metadata("logs/*").is_ok() {
+            fs::remove_dir_all("logs/*")?;
+        }
+    }
     println!("{}", "\nDatabase dropped.".red());
 
     Ok(())
 }
 
-fn clean_local_credentials() -> io::Result<()> {
+fn clean_local_credentials() -> std::io::Result<()> {
     println!("{}", "Cleaning up local credentials...".bright_blue());
 
-    let home_my_cnf = format!("{}/.my.cnf", env::var("HOME").unwrap());
-    remove_if_exists("mysql/.my.cnf")?;
-    remove_if_exists(&home_my_cnf)?;
+    if fs::metadata("mysql/.my.cnf").is_ok() {
+        fs::remove_file("mysql/.my.cnf")?;
+        fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
+    } else if fs::metadata(format!("{}/.my.cnf", env::var("HOME").unwrap())).is_ok() {
+        fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
+    }
 
     Ok(())
 }
 
-fn setup_local_database() -> io::Result<()> {
+fn setup_local_database() -> std::io::Result<()> {
     println!("{}", "\nDatabase setup...".bright_blue());
     println!("{}", "Setting up mysql in env...".yellow());
 
@@ -133,95 +141,122 @@ fn setup_local_database() -> io::Result<()> {
         println!("{}", "No database found. Creating...".red());
         Command::new("mysqlinit")
             .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .expect("Failed to execute command");
     } else {
-        println!("{}", "\nLocal database already setup. Continuing...".yellow());
+        println!(
+            "{}",
+            "\nLocal database already setup. Continuing...".yellow()
+        );
     }
 
     println!("{}", "setting up mysqlcred...".yellow());
     Command::new("mysqlcred")
         .status()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+        .expect("Failed to execute command");
 
     Ok(())
 }
 
-fn setup_external_database(register_name: &str) -> io::Result<()> {
-    println!("{}", "\nsetting up mysqlcred...".bright_blue());
+fn setup_external_database(register_name: &str) -> std::io::Result<()> {
+    println!("{}", "\nsetting up mysqlcred...".yellow());
 
     Command::new("mysqlcred")
         .status()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+        .expect("Failed to execute command");
 
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_err() {
         println!("{}", "No database found. Creating...".red());
-        println!("{}", "Setting up root...".yellow());
+        println!("{}", "Setting up root...".on_bright_cyan());
 
-        let mysql_create_db = env::var("MYSQL_CREATE_DB").map_err(|_| io::Error::new(io::ErrorKind::Other, "MYSQL_CREATE_DB must be set"))?;
+        let mysql_create_db = env::var("MYSQL_CREATE_DB").expect("MYSQL_CREATE_DB must be set");
         Command::new("mysql")
             .arg("<")
             .arg(mysql_create_db)
             .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .expect("Failed to execute command");
 
         println!("Creating database {}...", register_name);
         fs::File::create(format!("mysql/{}.sql", register_name))?;
     } else {
         println!("{}", "Local database already setup. Continuing...".yellow());
 
-        let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").map_err(|_| io::Error::new(io::ErrorKind::Other, "MYSQL_LOCAL_LOAD_FILE must be set"))?;
+        let mysql_local_load_file =
+            env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
         Command::new("mysql")
             .arg("<")
             .arg(mysql_local_load_file)
             .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .expect("Failed to execute command");
     }
 
     Ok(())
 }
 
 fn start_database() -> std::io::Result<()> {
-    let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
-    if fs::metadata("mysql/socket.lock").is_err() && Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
-        println!("{}", "Starting MySQL as no socket.lock file and MySQL is not running...".bright_blue());
+    let mysql_local_load_file =
+        env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
+    if fs::metadata("mysql/socket.lock").is_err()
+        && Command::new("pgrep")
+            .arg("mysqld")
+            .output()?
+            .stdout
+            .is_empty()
+    {
+        println!(
+            "{}",
+            "Starting MySQL as no socket.lock file and MySQL is not running...".bright_blue()
+        );
         Command::new("start_mysql")
             .status()
             .expect("Failed to execute command");
 
-        println!("{}", "Setting load local inline files permissions...".yellow());
-        let output = Command::new("mysql")
+        println!(
+            "{}",
+            "Setting load local inline files permissions...".yellow()
+        );
+        Command::new("mysql")
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
             .arg("<")
             .arg(&mysql_local_load_file)
-            .output()?;
-
-        if !output.status.success() {
-            eprintln!("Command failed with the following output:");
-            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
-        }
+            .status()
+            .expect("Failed to execute command");
 
         thread::sleep(Duration::from_secs(3));
-    } else if fs::metadata("mysql/socket.lock").is_ok() && !Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
-        println!("{}", "socket.lock file exists and MySQL is running. Continuing...".yellow());
-        println!("{}", "Setting load local inline files permissions...".bright_blue());
-        let output = Command::new("mysql")
+    } else if fs::metadata("mysql/socket.lock").is_ok()
+        && !Command::new("pgrep")
+            .arg("mysqld")
+            .output()?
+            .stdout
+            .is_empty()
+    {
+        println!(
+            "{}",
+            "socket.lock file exists and MySQL is running. Continuing...".yellow()
+        );
+        println!(
+            "{}",
+            "Setting load local inline files permissions...".bright_blue()
+        );
+        Command::new("mysql")
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
             .arg("<")
             .arg(&mysql_local_load_file)
-            .output()?;
-
-        if !output.status.success() {
-            eprintln!("Command failed with the following output:");
-            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
-        }
-    } else if fs::metadata("mysql/socket.lock").is_err() && !Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
-        println!("{}", "MySQL is running, but no socket.lock file found. Killing MySQL and restarting...".red());
+            .status()
+            .expect("Failed to execute command");
+    } else if fs::metadata("mysql/socket.lock").is_err()
+        && !Command::new("pgrep")
+            .arg("mysqld")
+            .output()?
+            .stdout
+            .is_empty()
+    {
+        println!(
+            "{}",
+            "MySQL is running, but no socket.lock file found. Killing MySQL and restarting..."
+                .red()
+        );
         Command::new("pkill")
             .arg("mysqld")
             .status()
@@ -232,20 +267,17 @@ fn start_database() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
 
-        println!("{}", "Setting load local inline files permissions...".yellow());
-        let output = Command::new("mysql")
+        println!(
+            "{}",
+            "Setting load local inline files permissions...".yellow()
+        );
+        Command::new("mysql")
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
             .arg("<")
             .arg(&mysql_local_load_file)
-            .output()?;
-
-        if !output.status.success() {
-            eprintln!("Command failed with the following output:");
-            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
-        }
+            .status()
+            .expect("Failed to execute command");
 
         thread::sleep(Duration::from_secs(3));
     }
@@ -256,33 +288,21 @@ fn start_database() -> std::io::Result<()> {
 fn compile_maven() -> std::io::Result<()> {
     if fs::metadata("target").is_err() {
         println!("{}", "No target directory found...".red());
-        let output = Command::new("mvn")
+        Command::new("mvn")
             .arg("clean")
             .arg("install")
             .arg("-DskipTests")
-            .output()?;
-
-        if !output.status.success() {
-            eprintln!("Command failed with the following output:");
-            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
-        }
+            .status()
+            .expect("Failed to execute command");
     } else {
         println!("{}", "Target directory found. Cleaning up...".yellow());
         fs::remove_dir_all("target")?;
-        let output = Command::new("mvn")
+        Command::new("mvn")
             .arg("clean")
             .arg("package")
             .arg("-DskipTests")
-            .output()?;
-
-        if !output.status.success() {
-            eprintln!("Command failed with the following output:");
-            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
-            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
-            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
-        }
+            .status()
+            .expect("Failed to execute command");
     }
 
     Ok(())
@@ -292,34 +312,34 @@ fn start_tomcat(register_name: &str) -> std::io::Result<()> {
     println!("{}", "Local environment detected...".bright_blue());
     println!("{}", "Setting up Tomcat...".yellow());
 
-    let catalina_home = env::var("CATALINA_HOME").map_err(|_| io::Error::new(io::ErrorKind::Other, "CATALINA_HOME must be set"))?;
-    let war_path = format!("{}/webapps/{}.war", catalina_home, register_name);
-    let webapp_path = format!("{}/webapps/{}", catalina_home, register_name);
-
-    if fs::metadata(&war_path).is_ok() {
+    let catalina_home = env::var("CATALINA_HOME").unwrap();
+    if fs::metadata(format!("{}/webapps/{}.war", catalina_home, register_name)).is_ok() {
         println!("{}", "delete old war file...".red());
-        fs::remove_file(&war_path)?;
+        fs::remove_file(format!("{}/webapps/{}.war", catalina_home, register_name))?;
     }
-    if fs::metadata(&webapp_path).is_ok() {
+    if fs::metadata(format!("{}/webapps/{}", catalina_home, register_name)).is_ok() {
         println!("{}", "delete webapps folder...".red());
-        fs::remove_dir_all(&webapp_path)?;
+        fs::remove_dir_all(format!("{}/webapps/{}", catalina_home, register_name))?;
     }
 
     println!("{}", "Deploying new WAR...".yellow());
-    fs::copy(format!("target/{}.war", register_name), &war_path)?;
+    fs::copy(
+        format!("target/{}.war", register_name),
+        format!("{}/webapps/{}.war", catalina_home, register_name),
+    )?;
 
-    println!("{}", "Starting Tomcat...".yellow());
+    println!("Starting Tomcat...");
     Command::new("sh")
         .arg("-c")
         .arg("start_tomcat")
         .status()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+        .expect("Failed to execute command");
 
     Ok(())
 }
 
 fn copy_db_files() -> std::io::Result<()> {
-    let catalina_home = env::var("CATALINA_HOME").map_err(|_| io::Error::new(io::ErrorKind::Other, "CATALINA_HOME must be set"))?;
+    let catalina_home = env::var("CATALINA_HOME").unwrap();
     let db_path = format!("{}/bin/src/main/resources/db/application", catalina_home);
 
     if !Path::new(&db_path).exists() {
@@ -332,7 +352,7 @@ fn copy_db_files() -> std::io::Result<()> {
         .arg("./src/main/resources/db/application/")
         .arg(&db_path)
         .status()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+        .expect("Failed to execute command");
 
     Ok(())
 }
@@ -342,16 +362,11 @@ fn main() -> std::io::Result<()> {
         .version("1.0")
         .author("Gako358 <gako358@outlook.com>")
         .about("Sets up environment for running the application")
-        .subcommand(App::new("local")
-            .about("Sets up local environment"))
-        .subcommand(App::new("code")
-            .about("Sets up environment for VScode"))
-        .subcommand(App::new("docker")
-            .about("Sets up environment for Docker"))
-        .subcommand(App::new("clean")
-            .about("Cleans up and stops services"))
-        .subcommand(App::new("drop")
-            .about("Cleans up, stops services and drops database"))
+        .subcommand(App::new("local").about("Sets up local environment"))
+        .subcommand(App::new("code").about("Sets up environment for VScode"))
+        .subcommand(App::new("docker").about("Sets up environment for Docker"))
+        .subcommand(App::new("clean").about("Cleans up and stops services"))
+        .subcommand(App::new("drop").about("Cleans up, stops services and drops database"))
         .get_matches();
 
     let output = Command::new("nix-instantiate")
@@ -361,65 +376,60 @@ fn main() -> std::io::Result<()> {
         .output()
         .expect("Failed to execute command");
 
-    let output_str = str::from_utf8(&output.stdout).expect("Failed to convert output to string");
+    let output_str = str::from_utf8(&output.stdout).unwrap();
     let register: Register = from_str(output_str).expect("Failed to parse JSON");
     let register_name = register.register_name;
 
     if let Some(_matches) = matches.subcommand_matches("local") {
-        let compile_handle = std::thread::spawn(|| {
-            compile_maven()
-        });
-
-        println!("{}", "Stopping running services...".yellow());
-        Command::new("stop_tomcat").status().expect("Failed to execute command");
+        println!("{}", "Stopping running services...".red());
+        Command::new("stop_tomcat")
+            .status()
+            .expect("Failed to execute command");
         clean_local_credentials()?;
         setup_local_database()?;
         start_database()?;
-
-        match compile_handle.join().expect("Thread panicked") {
-            Ok(_) => println!("Maven compiled successfully"),
-            Err(e) => eprintln!("Failed to compile Maven: {}", e),
-        }
-
+        compile_maven()?;
         start_tomcat(&register_name)?;
         println!("{}", "Finished setting up environment for local...".green());
     } else if let Some(_matches) = matches.subcommand_matches("code") {
-        let compile_handle = std::thread::spawn(|| {
-            compile_maven()
-        });
-
         println!("{}", "Stopping running services...".red());
-        Command::new("stop_tomcat").status().expect("Failed to execute command");
+        Command::new("stop_tomcat")
+            .status()
+            .expect("Failed to execute command");
         clean_local_credentials()?;
         setup_external_database(&register_name)?;
-
-        match compile_handle.join().expect("Thread panicked") {
-            Ok(_) => println!("Maven compiled successfully"),
-            Err(e) => eprintln!("Failed to compile Maven: {}", e),
-        }
-
+        compile_maven()?;
         start_tomcat(&register_name)?;
-        println!("{}", "Finished setting up environment for VScode...".green());
+        println!(
+            "{}",
+            "Finished setting up environment for VScode...".green()
+        );
     } else if let Some(_matches) = matches.subcommand_matches("docker") {
-        let compile_handle = std::thread::spawn(|| {
-            compile_maven()
-        });
-
         println!("{}", "Stopping running services...".red());
-        Command::new("docker-compose").arg("down").status().expect("Failed to execute command");
+        Command::new("docker-compose")
+            .arg("down")
+            .status()
+            .expect("Failed to execute command");
         clean_local_credentials()?;
         setup_local_database()?;
         start_database()?;
-
-        match compile_handle.join().expect("Thread panicked") {
-            Ok(_) => println!("Maven compiled successfully"),
-            Err(e) => eprintln!("Failed to compile Maven: {}", e),
-        }
-
-        Command::new("docker").arg("build").arg("-t").arg(format!("{}:latest", register_name)).status().expect("Failed to execute command");
+        compile_maven()?;
+        Command::new("docker")
+            .arg("build")
+            .arg("-t")
+            .arg(format!("{}:latest", register_name))
+            .status()
+            .expect("Failed to execute command");
         println!("{}", "Starting services...".blue());
-        Command::new("docker-compose").arg("up").arg("-d").status().expect("Failed to execute command");
-        println!("{}", "Finished setting up environment for Docker...".green());
+        Command::new("docker-compose")
+            .arg("up")
+            .arg("-d")
+            .status()
+            .expect("Failed to execute command");
+        println!(
+            "{}",
+            "Finished setting up environment for Docker...".green()
+        );
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
         clean_up(&register_name)?;
         std::process::exit(0);
@@ -428,22 +438,20 @@ fn main() -> std::io::Result<()> {
         drop_database(&register_name)?;
         std::process::exit(0);
     } else {
-        let compile_handle = std::thread::spawn(|| {
-            compile_maven()
-        });
-
         clean_local_credentials()?;
         setup_external_database(&register_name)?;
-
-        match compile_handle.join().expect("Thread panicked") {
-            Ok(_) => println!("Maven compiled successfully"),
-            Err(e) => eprintln!("Failed to compile Maven: {}", e),
-        }
-
+        compile_maven()?;
         copy_db_files()?;
-        println!("{}", "Finished setting up environment for Intellij...".red());
-        println!("{}", "Start the tomcat server from inside Intellij...".blue());
+        println!(
+            "{}",
+            "Finnished setting up environment for Intellij...".red()
+        );
+        println!(
+            "{}",
+            "Start the tomcat server from inside Intellij...".blue()
+        );
     }
 
     Ok(())
+
 }
