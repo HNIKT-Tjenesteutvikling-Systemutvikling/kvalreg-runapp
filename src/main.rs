@@ -180,59 +180,77 @@ fn setup_external_database(register_name: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn start_database() -> io::Result<()> {
-    let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").map_err(|_| io::Error::new(io::ErrorKind::Other, "MYSQL_LOCAL_LOAD_FILE must be set"))?;
-    let socket_lock_exists = fs::metadata("mysql/socket.lock").is_ok();
-    let mysql_running = !Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty();
-
-    if !socket_lock_exists && !mysql_running {
+fn start_database() -> std::io::Result<()> {
+    let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
+    if fs::metadata("mysql/socket.lock").is_err() && Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
         println!("{}", "Starting MySQL as no socket.lock file and MySQL is not running...".bright_blue());
         Command::new("start_mysql")
             .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .expect("Failed to execute command");
 
-        set_local_inline_files_permissions(&mysql_local_load_file)?;
+        println!("{}", "Setting load local inline files permissions...".yellow());
+        let output = Command::new("mysql")
+            .arg("-S")
+            .arg("MYSQL_UNIX_PORT")
+            .arg("<")
+            .arg(&mysql_local_load_file)
+            .output()?;
+
+        if !output.status.success() {
+            eprintln!("Command failed with the following output:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
+        }
 
         thread::sleep(Duration::from_secs(3));
-    } else if socket_lock_exists && mysql_running {
+    } else if fs::metadata("mysql/socket.lock").is_ok() && !Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
         println!("{}", "socket.lock file exists and MySQL is running. Continuing...".yellow());
-        set_local_inline_files_permissions(&mysql_local_load_file)?;
-    } else if !socket_lock_exists && mysql_running {
+        println!("{}", "Setting load local inline files permissions...".bright_blue());
+        let output = Command::new("mysql")
+            .arg("-S")
+            .arg("MYSQL_UNIX_PORT")
+            .arg("<")
+            .arg(&mysql_local_load_file)
+            .output()?;
+
+        if !output.status.success() {
+            eprintln!("Command failed with the following output:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
+        }
+    } else if fs::metadata("mysql/socket.lock").is_err() && !Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
         println!("{}", "MySQL is running, but no socket.lock file found. Killing MySQL and restarting...".red());
         Command::new("pkill")
             .arg("mysqld")
             .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .expect("Failed to execute command");
 
         thread::sleep(Duration::from_secs(3));
         Command::new("start_mysql")
             .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .expect("Failed to execute command");
 
-        set_local_inline_files_permissions(&mysql_local_load_file)?;
+        println!("{}", "Setting load local inline files permissions...".yellow());
+        let output = Command::new("mysql")
+            .arg("-S")
+            .arg("MYSQL_UNIX_PORT")
+            .arg("<")
+            .arg(&mysql_local_load_file)
+            .output()?;
+
+        if !output.status.success() {
+            eprintln!("Command failed with the following output:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
+        }
 
         thread::sleep(Duration::from_secs(3));
     }
 
     Ok(())
-}
-
-fn set_local_inline_files_permissions(mysql_local_load_file: &str) -> io::Result<()> {
-    println!("{}", "Setting load local inline files permissions...".yellow());
-    let output = Command::new("mysql")
-        .arg("-S")
-        .arg("MYSQL_UNIX_PORT")
-        .arg("<")
-        .arg(mysql_local_load_file)
-        .output()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
-
-    if output.status.success() {
-        Ok(())
-    } else {
-        eprintln!("Command output: {:?}", output);
-        Err(io::Error::new(io::ErrorKind::Other, "Command failed"))
-    }
 }
 
 fn compile_maven() -> std::io::Result<()> {
