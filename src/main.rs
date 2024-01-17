@@ -219,17 +219,18 @@ fn start_database() -> io::Result<()> {
 
 fn set_local_inline_files_permissions(mysql_local_load_file: &str) -> io::Result<()> {
     println!("{}", "Setting load local inline files permissions...".yellow());
-    let status = Command::new("mysql")
+    let output = Command::new("mysql")
         .arg("-S")
         .arg("MYSQL_UNIX_PORT")
         .arg("<")
         .arg(mysql_local_load_file)
-        .status()
+        .output()
         .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
 
-    if status.success() {
+    if output.status.success() {
         Ok(())
     } else {
+        eprintln!("Command output: {:?}", output);
         Err(io::Error::new(io::ErrorKind::Other, "Command failed"))
     }
 }
@@ -237,21 +238,33 @@ fn set_local_inline_files_permissions(mysql_local_load_file: &str) -> io::Result
 fn compile_maven() -> std::io::Result<()> {
     if fs::metadata("target").is_err() {
         println!("{}", "No target directory found...".red());
-        Command::new("mvn")
+        let output = Command::new("mvn")
             .arg("clean")
             .arg("install")
             .arg("-DskipTests")
-            .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .output()?;
+
+        if !output.status.success() {
+            eprintln!("Command failed with the following output:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
+        }
     } else {
         println!("{}", "Target directory found. Cleaning up...".yellow());
         fs::remove_dir_all("target")?;
-        Command::new("mvn")
+        let output = Command::new("mvn")
             .arg("clean")
             .arg("package")
             .arg("-DskipTests")
-            .status()
-            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+            .output()?;
+
+        if !output.status.success() {
+            eprintln!("Command failed with the following output:");
+            eprintln!("{}", String::from_utf8_lossy(&output.stdout));
+            eprintln!("{}", String::from_utf8_lossy(&output.stderr));
+            return Err(io::Error::new(io::ErrorKind::Other, "Command failed"));
+        }
     }
 
     Ok(())
