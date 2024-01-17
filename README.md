@@ -12,7 +12,7 @@ RunApp is designed to automate and streamline the process of setting up, running
 
 - **Improved Error Handling**: Rust's robust error handling mechanisms allow RunApp to handle unexpected situations gracefully, providing clear and helpful error messages.
 
-- **Cross-Platform Compatibility**: Rust's excellent cross-platform support ensures that RunApp works consistently across a wide range of operating systems.
+- **Cross-Platform Compatibility**: Rust's excellent cross-platform support ensures that RunApp works consistently across a wide range of operating systems. Only runs(blazingly fast) on NixOS
 
 - **Efficient Resource Usage**: With Rust, RunApp uses system resources more efficiently, leading to a smoother and blazingly fast user experience.
 
@@ -33,3 +33,5 @@ This will create a blazingly fast executable in the `result` directory. You can 
 ## Conclusion
 
 We're excited to bring you this new and improved version of RunApp. With its blazingly fast performance and robust error handling, we believe that RunApp will significantly improve your productivity and efficiency. Give it a try and experience the speed of Rust!
+
+
