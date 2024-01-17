@@ -289,9 +289,11 @@ fn start_tomcat(register_name: &str) -> std::io::Result<()> {
 
     let catalina_home = env::var("CATALINA_HOME").unwrap();
     if fs::metadata(format!("{}/webapps/{}.war", catalina_home, register_name)).is_ok() {
+        println!("delete old war file...");
         fs::remove_file(format!("{}/webapps/{}.war", catalina_home, register_name))?;
     }
     if fs::metadata(format!("{}/webapps/{}", catalina_home, register_name)).is_ok() {
+        println!("delete webapps folder...");
         fs::remove_dir_all(format!("{}/webapps/{}", catalina_home, register_name))?;
     }
 
@@ -299,7 +301,9 @@ fn start_tomcat(register_name: &str) -> std::io::Result<()> {
     fs::copy(format!("target/{}.war", register_name), format!("{}/webapps/{}.war", catalina_home, register_name))?;
 
     println!("Starting Tomcat...");
-    Command::new(format!("{}/bin/start_tomcat", catalina_home))
+    Command::new("sh")
+        .arg("-c")
+        .arg("start_tomcat")
         .status()
         .expect("Failed to execute command");
 
