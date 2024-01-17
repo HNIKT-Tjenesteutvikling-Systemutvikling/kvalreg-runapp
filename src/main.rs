@@ -10,7 +10,7 @@ use std::process::Command;
 use std::str;
 use std::thread;
 use std::time::Duration;
-use tokio::task;
+use std::sync::Arc;
 
 extern crate dirs;
 
@@ -355,8 +355,7 @@ fn copy_db_files() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
+fn main() -> std::io::Result<()> {
     let matches = App::new("runapp")
         .version("1.0")
         .author("Gako358 <gako358@outlook.com>")
@@ -377,9 +376,7 @@ async fn main() -> std::io::Result<()> {
 
     let output_str = str::from_utf8(&output.stdout).unwrap();
     let register: Register = from_str(output_str).expect("Failed to parse JSON");
-    let register_name = register.register_name;
-
-    let mut handles = Vec::new();
+    let register_name = Arc::new(register.register_name);
 
     if let Some(_matches) = matches.subcommand_matches("local") {
         println!("{}", "Stopping running services...".red());
@@ -390,12 +387,13 @@ async fn main() -> std::io::Result<()> {
         setup_local_database()?;
         start_database()?;
 
-        let compile_maven_task = task::spawn(async {
-            compile_maven().expect("Failed to compile Maven");
+        let register_name_clone = Arc::clone(&register_name);
+        let compile_maven_handle = thread::spawn(move || {
+            compile_maven().unwrap();
+            start_tomcat(&*register_name_clone).unwrap();
         });
-        handles.push(compile_maven_task);
 
-        start_tomcat(&register_name)?;
+        compile_maven_handle.join().unwrap();
         println!("{}", "Finished setting up environment for local...".green());
     } else if let Some(_matches) = matches.subcommand_matches("code") {
         println!("{}", "Stopping running services...".red());
@@ -403,14 +401,15 @@ async fn main() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
         clean_local_credentials()?;
-        setup_external_database(&register_name)?;
+        setup_external_database(&*register_name)?;
 
-        let compile_maven_task = task::spawn(async {
-            compile_maven().expect("Failed to compile Maven");
+        let register_name_clone = Arc::clone(&register_name);
+        let compile_maven_handle = thread::spawn(move || {
+            compile_maven().unwrap();
+            start_tomcat(&*register_name_clone).unwrap();
         });
-        handles.push(compile_maven_task);
 
-        start_tomcat(&register_name)?;
+        compile_maven_handle.join().unwrap();
         println!(
             "{}",
             "Finished setting up environment for VScode...".green()
@@ -425,46 +424,46 @@ async fn main() -> std::io::Result<()> {
         setup_local_database()?;
         start_database()?;
 
-        let compile_maven_task = task::spawn(async {
-            compile_maven().expect("Failed to compile Maven");
+        let register_name_clone = Arc::clone(&register_name);
+        let compile_maven_handle = thread::spawn(move || {
+            compile_maven().unwrap();
+            Command::new("docker")
+                .arg("build")
+                .arg("-t")
+                .arg(format!("{}:latest", &*register_name_clone))
+                .status()
+                .expect("Failed to execute command");
         });
-        handles.push(compile_maven_task);
 
-        Command::new("docker")
-            .arg("build")
-            .arg("-t")
-            .arg(format!("{}:latest", register_name))
-            .status()
-            .expect("Failed to execute command");
+        compile_maven_handle.join().unwrap();
         println!("{}", "Starting services...".blue());
         Command::new("docker-compose")
             .arg("up")
             .arg("-d")
             .status()
             .expect("Failed to execute command");
-
         println!(
             "{}",
             "Finished setting up environment for Docker...".green()
         );
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
-        clean_up(&register_name)?;
+        clean_up(&*register_name)?;
         std::process::exit(0);
     } else if let Some(_matches) = matches.subcommand_matches("drop") {
-        clean_up(&register_name)?;
-        drop_database(&register_name)?;
+        clean_up(&*register_name)?;
+        drop_database(&*register_name)?;
         std::process::exit(0);
     } else {
         clean_local_credentials()?;
-        setup_external_database(&register_name)?;
+        setup_external_database(&*register_name)?;
 
-        let compile_maven_task = task::spawn(async {
-            compile_maven().expect("Failed to compile Maven");
+        let register_name_clone = Arc::clone(&register_name);
+        let compile_maven_handle = thread::spawn(move || {
+            compile_maven().unwrap();
+            copy_db_files().unwrap();
         });
-        handles.push(compile_maven_task);
 
-        copy_db_files()?;
-
+        compile_maven_handle.join().unwrap();
         println!(
             "{}",
             "Finnished setting up environment for Intellij...".red()
@@ -473,11 +472,6 @@ async fn main() -> std::io::Result<()> {
             "{}",
             "Start the tomcat server from inside Intellij...".blue()
         );
-    }
-
-    // Await all tasks at the end
-    for handle in handles {
-        let _ = handle.await;
     }
 
     Ok(())
