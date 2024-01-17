@@ -61,7 +61,7 @@
           '';
         in
         pkgs.mkShell {
-          name = "bloggen-2.0-dev";
+          name = "runapp-dev";
           buildInputs = with pkgs; [
             rustc
             cargo
