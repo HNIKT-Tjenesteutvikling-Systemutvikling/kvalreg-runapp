@@ -11,6 +11,8 @@ use std::thread;
 use std::time::Duration;
 use std::io::{self, ErrorKind};
 
+extern crate dirs;
+
 #[derive(Deserialize)]
 struct Register {
     #[serde(rename = "registerName")]
@@ -63,6 +65,9 @@ fn clean_up(register_name: &str) -> io::Result<()> {
         println!("{}", "\nAwaiting MySQL shutdown...\n".red());
         thread::sleep(Duration::from_secs(5));
 
+        let home_dir = dirs::home_dir().expect("Home directory not found");
+        let my_cnf_path = home_dir.join(".my.cnf");
+        remove_if_exists(my_cnf_path.to_str().unwrap())?;
         remove_if_exists("mysql/.my.cnf")?;
         remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
         remove_if_exists(&format!("target/{}.war", register_name))?;
@@ -100,9 +105,9 @@ fn drop_database(register_name: &str) -> io::Result<()> {
 
     remove_if_exists("mysql/data")?;
 
-    let home_dir = env::var("HOME").unwrap();
-    remove_if_exists("mysql/.my.cnf")?;
-    remove_if_exists(&format!("{}/.my.cnf", home_dir))?;
+    let home_dir = dirs::home_dir().expect("Home directory not found");
+    let my_cnf_path = home_dir.join(".my.cnf");
+    remove_if_exists(my_cnf_path.to_str().unwrap())?;
 
     let catalina_home = env::var("CATALINA_HOME").unwrap();
     remove_if_exists(&format!("{}/bin/src/*", catalina_home))?;
