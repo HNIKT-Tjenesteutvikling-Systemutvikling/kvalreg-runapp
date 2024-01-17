@@ -4,11 +4,12 @@ use serde::Deserialize;
 use serde_json::from_str;
 use std::env;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::str;
 use std::thread;
 use std::time::Duration;
+use std::io::{self, ErrorKind};
 
 #[derive(Deserialize)]
 struct Register {
@@ -16,58 +17,62 @@ struct Register {
     register_name: String,
 }
 
-fn clean_up(register_name: &str) -> std::io::Result<()> {
-    println!("{}", "Cleaning up and stopping services...".bright_blue());
-    Command::new("stop_tomcat").output()?;
+fn remove_if_exists(path: &str) -> io::Result<()> {
+    let path = Path::new(path);
+    if path.exists() {
+        if path.is_dir() {
+            fs::remove_dir_all(path)
+        } else {
+            fs::remove_file(path)
+        }
+    } else {
+        Ok(())
+    }
+}
 
-    Command::new("docker-compose").arg("down").output()?;
+fn clean_up(register_name: &str) -> io::Result<()> {
+    println!("{}", "Cleaning up and stopping services...".bright_blue());
+    Command::new("stop_tomcat")
+        .status()
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+
+    Command::new("docker-compose")
+        .arg("down")
+        .status()
+        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
 
     println!("{}", "Cleaning up and stopping MySQL...".yellow());
-    if Path::new("mysql/data").exists() {
-        if Path::new("mysql/socket.lock").exists() {
-            Command::new("stop_mysql").output()?;
+    if fs::metadata("mysql/data").is_ok() {
+        if fs::metadata("mysql/socket.lock").is_ok() {
+            Command::new("stop_mysql")
+                .status()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
 
-            let output = Command::new("pgrep").arg("mysqld").output()?;
+            let output = Command::new("pgrep")
+                .arg("mysqld")
+                .output()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
             if !output.stdout.is_empty() {
-                Command::new("pkill").arg("mysqld").output()?;
+                Command::new("pkill")
+                    .arg("mysqld")
+                    .status()
+                    .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
             }
         }
 
-        println!("{}", "\nAwaiting MySQL shutdown...".red());
+        println!("{}", "\nAwaiting MySQL shutdown...\n".red());
         thread::sleep(Duration::from_secs(5));
-        let home_dir =
-            env::var("HOME").map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        let catalina_home = env::var("CATALINA_HOME")
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        let paths_to_remove: Vec<PathBuf> = vec![
-            Path::new("mysql/.my.cnf").to_path_buf(),
-            Path::new(&home_dir).join(".my.cnf"),
-            Path::new("target")
-                .join(format!("{}.war", register_name))
-                .to_path_buf(),
-            Path::new("target").join(register_name).to_path_buf(),
-            Path::new(&catalina_home)
-                .join("webapps")
-                .join(format!("{}.war", register_name))
-                .to_path_buf(),
-            Path::new(&catalina_home)
-                .join("webapps")
-                .join(register_name)
-                .to_path_buf(),
-            Path::new(&catalina_home).join("bin/src/*").to_path_buf(),
-            Path::new(&catalina_home).join("logs/*").to_path_buf(),
-            Path::new("jdk/*").to_path_buf(),
-            Path::new("logs/*").to_path_buf(),
-        ];
-        for path in &paths_to_remove {
-            if path.exists() {
-                if path.is_dir() {
-                    fs::remove_dir_all(path)?;
-                } else {
-                    fs::remove_file(path)?;
-                }
-            }
-        }
+
+        remove_if_exists("mysql/.my.cnf")?;
+        remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
+        remove_if_exists(&format!("target/{}.war", register_name))?;
+        remove_if_exists(&format!("target/{}", register_name))?;
+        remove_if_exists(&format!("{}/webapps/{}.war", env::var("CATALINA_HOME").unwrap(), register_name))?;
+        remove_if_exists(&format!("{}/webapps/{}", env::var("CATALINA_HOME").unwrap(), register_name))?;
+        remove_if_exists(&format!("{}/bin/src/*", env::var("CATALINA_HOME").unwrap()))?;
+        remove_if_exists(&format!("{}/logs/*", env::var("CATALINA_HOME").unwrap()))?;
+        remove_if_exists("jdk/*")?;
+        remove_if_exists("logs/*")?;
 
         println!("{}", "Stopped running processes".red());
     } else {
@@ -77,7 +82,7 @@ fn clean_up(register_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn drop_database(register_name: &str) -> std::io::Result<()> {
+fn drop_database(register_name: &str) -> io::Result<()> {
     println!("{}", "Starting to drop database...".bright_blue());
 
     let mysql_drop_db = env::var("MYSQL_DROP_DB").expect("MYSQL_DROP_DB must be set");
@@ -87,38 +92,24 @@ fn drop_database(register_name: &str) -> std::io::Result<()> {
             .arg("<")
             .arg(&mysql_drop_db)
             .status()
-            .expect("Failed to execute command");
+            .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        if fs::metadata(format!("mysql/{}.sql", register_name)).is_ok() {
-            fs::remove_file(format!("mysql/{}.sql", register_name))?;
-        }
+        remove_if_exists(&format!("mysql/{}.sql", register_name))?;
     }
 
-    if fs::metadata("mysql/data").is_ok() {
-        println!("{}", "Dropping local database...".yellow());
-        fs::remove_dir_all("mysql/data")?;
-    }
+    remove_if_exists("mysql/data")?;
 
     let home_dir = env::var("HOME").unwrap();
-    if fs::metadata("mysql/.my.cnf").is_ok() {
-        fs::remove_file("mysql/.my.cnf")?;
-        if fs::metadata(format!("{}/.my.cnf", home_dir)).is_ok() {
-            fs::remove_file(format!("{}/.my.cnf", home_dir))?;
-        }
-    } else if fs::metadata(format!("{}/.my.cnf", home_dir)).is_ok() {
-        fs::remove_file(format!("{}/.my.cnf", home_dir))?;
-    }
+    remove_if_exists("mysql/.my.cnf")?;
+    remove_if_exists(&format!("{}/.my.cnf", home_dir))?;
 
     let catalina_home = env::var("CATALINA_HOME").unwrap();
-    if fs::metadata(format!("{}/bin/src", catalina_home)).is_ok() {
-        fs::remove_dir_all(format!("{}/bin/src/*", catalina_home))?;
-        fs::remove_dir_all(format!("{}/logs/*", catalina_home))?;
-        fs::remove_dir_all(format!("{}/webapps/*", catalina_home))?;
-        if fs::metadata("logs/*").is_ok() {
-            fs::remove_dir_all("logs/*")?;
-        }
-    }
+    remove_if_exists(&format!("{}/bin/src/*", catalina_home))?;
+    remove_if_exists(&format!("{}/logs/*", catalina_home))?;
+    remove_if_exists(&format!("{}/webapps/*", catalina_home))?;
+    remove_if_exists("logs/*")?;
+
     println!("{}", "\nDatabase dropped.".red());
 
     Ok(())
