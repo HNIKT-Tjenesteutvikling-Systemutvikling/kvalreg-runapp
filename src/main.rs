@@ -3,7 +3,7 @@ use serde_json::from_str;
 use std::env;
 use std::path::Path;
 use std::fs;
-use std::process::{Command, Output};
+use std::process::Command;
 use std::thread;
 use std::time::Duration;
 use std::str;
@@ -133,10 +133,11 @@ fn setup_local_database() -> std::io::Result<()> {
     println!("Database setup...");
     println!("Setting up mysql in env...");
 
-    let mysql_setup = env::var("MYSQL_SETUP").expect("MYSQL_SETUP must be set");
-    Command::new(mysql_setup)
-        .status()
-        .expect("Failed to execute command");
+    // let mysql_setup = env::var("MYSQL_SETUP").expect("MYSQL_SETUP must be set");
+    // println!("Running mysql setup\n\n");
+    // Command::new(mysql_setup)
+    //     .status()
+    //     .expect("Failed to execute command");
 
     if fs::metadata("mysql/data").is_err() {
         println!("No database found. Creating...");
