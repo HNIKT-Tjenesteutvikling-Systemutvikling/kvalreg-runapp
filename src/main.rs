@@ -3,9 +3,10 @@ use serde_json::from_str;
 use std::env;
 use std::path::Path;
 use std::fs;
-use std::process::Command;
+use std::process::{Command, Output};
 use std::thread;
 use std::time::Duration;
+use std::str;
 
 #[derive(Deserialize)]
 struct Register {
@@ -308,8 +309,15 @@ fn copy_db_files() -> std::io::Result<()> {
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    let register_json = fs::read_to_string("register.nix").expect("Failed to read file");
-    let register: Register = from_str(&register_json).expect("Failed to parse JSON");
+    let output = Command::new("nix-instantiate")
+        .arg("--eval")
+        .arg("--json")
+        .arg("register.nix")
+        .output()
+        .expect("Failed to execute command");
+
+    let output_str = str::from_utf8(&output.stdout).unwrap();
+    let register: Register = from_str(output_str).expect("Failed to parse JSON");
     let register_name = register.register_name;
 
     match args.get(1).map(String::as_str) {
