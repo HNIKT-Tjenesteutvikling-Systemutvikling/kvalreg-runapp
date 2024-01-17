@@ -118,12 +118,8 @@ fn drop_database(register_name: &str) -> io::Result<()> {
 fn clean_local_credentials() -> std::io::Result<()> {
     println!("{}", "Cleaning up local credentials...".bright_blue());
 
-    if fs::metadata("mysql/.my.cnf").is_ok() {
-        fs::remove_file("mysql/.my.cnf")?;
-        fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
-    } else if fs::metadata(format!("{}/.my.cnf", env::var("HOME").unwrap())).is_ok() {
-        fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
-    }
+    remove_if_exists("mysql/.my.cnf")?;
+    remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
 
     Ok(())
 }
@@ -134,9 +130,12 @@ fn setup_local_database() -> std::io::Result<()> {
 
     if fs::metadata("mysql/data").is_err() {
         println!("{}", "No database found. Creating...".red());
-        Command::new("mysqlinit")
+        let status = Command::new("mysqlinit")
             .status()
             .expect("Failed to execute command");
+        if !status.success() {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to initialize MySQL"));
+        }
     } else {
         println!(
             "{}",
@@ -145,9 +144,12 @@ fn setup_local_database() -> std::io::Result<()> {
     }
 
     println!("{}", "setting up mysqlcred...".yellow());
-    Command::new("mysqlcred")
+    let status = Command::new("mysqlcred")
         .status()
         .expect("Failed to execute command");
+    if !status.success() {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to setup MySQL credentials"));
+    }
 
     Ok(())
 }
@@ -155,20 +157,26 @@ fn setup_local_database() -> std::io::Result<()> {
 fn setup_external_database(register_name: &str) -> std::io::Result<()> {
     println!("{}", "\nsetting up mysqlcred...".yellow());
 
-    Command::new("mysqlcred")
+    let status = Command::new("mysqlcred")
         .status()
         .expect("Failed to execute command");
+    if !status.success() {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to setup MySQL credentials"));
+    }
 
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_err() {
         println!("{}", "No database found. Creating...".red());
         println!("{}", "Setting up root...".on_bright_cyan());
 
         let mysql_create_db = env::var("MYSQL_CREATE_DB").expect("MYSQL_CREATE_DB must be set");
-        Command::new("mysql")
+        let status = Command::new("mysql")
             .arg("<")
             .arg(mysql_create_db)
             .status()
             .expect("Failed to execute command");
+        if !status.success() {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to create MySQL database"));
+        }
 
         println!("Creating database {}...", register_name);
         fs::File::create(format!("mysql/{}.sql", register_name))?;
@@ -177,11 +185,14 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
 
         let mysql_local_load_file =
             env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
-        Command::new("mysql")
+        let status = Command::new("mysql")
             .arg("<")
             .arg(mysql_local_load_file)
             .status()
             .expect("Failed to execute command");
+        if !status.success() {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to load local MySQL file"));
+        }
     }
 
     Ok(())
