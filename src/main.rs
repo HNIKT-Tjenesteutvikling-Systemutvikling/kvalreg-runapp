@@ -10,6 +10,7 @@ use std::process::Command;
 use std::str;
 use std::thread;
 use std::time::Duration;
+use tokio::task;
 
 extern crate dirs;
 
@@ -354,7 +355,8 @@ fn copy_db_files() -> std::io::Result<()> {
     Ok(())
 }
 
-fn main() -> std::io::Result<()> {
+#[tokio::main]
+async fn main() -> std::io::Result<()> {
     let matches = App::new("runapp")
         .version("1.0")
         .author("Gako358 <gako358@outlook.com>")
@@ -385,8 +387,15 @@ fn main() -> std::io::Result<()> {
         clean_local_credentials()?;
         setup_local_database()?;
         start_database()?;
-        compile_maven()?;
+
+        let compile_maven_task = task::spawn(async {
+            compile_maven().expect("Failed to compile Maven");
+        });
+
         start_tomcat(&register_name)?;
+
+        compile_maven_task.await.unwrap();
+
         println!("{}", "Finished setting up environment for local...".green());
     } else if let Some(_matches) = matches.subcommand_matches("code") {
         println!("{}", "Stopping running services...".red());
@@ -395,8 +404,15 @@ fn main() -> std::io::Result<()> {
             .expect("Failed to execute command");
         clean_local_credentials()?;
         setup_external_database(&register_name)?;
-        compile_maven()?;
+
+        let compile_maven_task = task::spawn(async {
+            compile_maven().expect("Failed to compile Maven");
+        });
+
         start_tomcat(&register_name)?;
+
+        compile_maven_task.await.unwrap();
+
         println!(
             "{}",
             "Finished setting up environment for VScode...".green()
@@ -410,7 +426,11 @@ fn main() -> std::io::Result<()> {
         clean_local_credentials()?;
         setup_local_database()?;
         start_database()?;
-        compile_maven()?;
+
+        let compile_maven_task = task::spawn(async {
+            compile_maven().expect("Failed to compile Maven");
+        });
+
         Command::new("docker")
             .arg("build")
             .arg("-t")
@@ -423,6 +443,9 @@ fn main() -> std::io::Result<()> {
             .arg("-d")
             .status()
             .expect("Failed to execute command");
+
+        compile_maven_task.await.unwrap();
+
         println!(
             "{}",
             "Finished setting up environment for Docker...".green()
@@ -437,8 +460,15 @@ fn main() -> std::io::Result<()> {
     } else {
         clean_local_credentials()?;
         setup_external_database(&register_name)?;
-        compile_maven()?;
+
+        let compile_maven_task = task::spawn(async {
+            compile_maven().expect("Failed to compile Maven");
+        });
+
         copy_db_files()?;
+
+        compile_maven_task.await.unwrap();
+
         println!(
             "{}",
             "Finnished setting up environment for Intellij...".red()
