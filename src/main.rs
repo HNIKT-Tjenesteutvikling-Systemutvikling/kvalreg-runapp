@@ -301,7 +301,7 @@ fn copy_db_files() -> std::io::Result<()> {
     Ok(())
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let matches = App::new("runapp")
         .version("1.0")
         .author("Gako358 <gako358@outlook.com>")
@@ -325,47 +325,55 @@ fn main() {
         .output()
         .expect("Failed to execute command");
 
-    let output_str = str::from_utf8(&output.stdout).unwrap();
+    let output_str = str::from_utf8(&output.stdout).expect("Failed to convert output to string");
     let register: Register = from_str(output_str).expect("Failed to parse JSON");
     let register_name = register.register_name;
 
-    let compile_handle = std::thread::spawn(|| {
-        compile_maven()
-    });
-
     if let Some(_matches) = matches.subcommand_matches("local") {
+        let compile_handle = std::thread::spawn(|| {
+            compile_maven()
+        });
+
         println!("{}", "Stopping running services...".yellow());
         Command::new("stop_tomcat").status().expect("Failed to execute command");
-        clean_local_credentials().unwrap();
-        setup_local_database().unwrap();
-        start_database().unwrap();
+        clean_local_credentials()?;
+        setup_local_database()?;
+        start_database()?;
 
         match compile_handle.join().expect("Thread panicked") {
             Ok(_) => println!("Maven compiled successfully"),
             Err(e) => eprintln!("Failed to compile Maven: {}", e),
         }
 
-        start_tomcat(&register_name).unwrap();
+        start_tomcat(&register_name)?;
         println!("{}", "Finished setting up environment for local...".green());
     } else if let Some(_matches) = matches.subcommand_matches("code") {
+        let compile_handle = std::thread::spawn(|| {
+            compile_maven()
+        });
+
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat").status().expect("Failed to execute command");
-        clean_local_credentials().unwrap();
-        setup_external_database(&register_name).unwrap();
+        clean_local_credentials()?;
+        setup_external_database(&register_name)?;
 
         match compile_handle.join().expect("Thread panicked") {
             Ok(_) => println!("Maven compiled successfully"),
             Err(e) => eprintln!("Failed to compile Maven: {}", e),
         }
 
-        start_tomcat(&register_name).unwrap();
+        start_tomcat(&register_name)?;
         println!("{}", "Finished setting up environment for VScode...".green());
     } else if let Some(_matches) = matches.subcommand_matches("docker") {
+        let compile_handle = std::thread::spawn(|| {
+            compile_maven()
+        });
+
         println!("{}", "Stopping running services...".red());
         Command::new("docker-compose").arg("down").status().expect("Failed to execute command");
-        clean_local_credentials().unwrap();
-        setup_local_database().unwrap();
-        start_database().unwrap();
+        clean_local_credentials()?;
+        setup_local_database()?;
+        start_database()?;
 
         match compile_handle.join().expect("Thread panicked") {
             Ok(_) => println!("Maven compiled successfully"),
@@ -377,23 +385,29 @@ fn main() {
         Command::new("docker-compose").arg("up").arg("-d").status().expect("Failed to execute command");
         println!("{}", "Finished setting up environment for Docker...".green());
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
-        clean_up(&register_name).unwrap();
+        clean_up(&register_name)?;
         std::process::exit(0);
     } else if let Some(_matches) = matches.subcommand_matches("drop") {
-        clean_up(&register_name).unwrap();
-        drop_database(&register_name).unwrap();
+        clean_up(&register_name)?;
+        drop_database(&register_name)?;
         std::process::exit(0);
     } else {
-        clean_local_credentials().unwrap();
-        setup_external_database(&register_name).unwrap();
+        let compile_handle = std::thread::spawn(|| {
+            compile_maven()
+        });
+
+        clean_local_credentials()?;
+        setup_external_database(&register_name)?;
 
         match compile_handle.join().expect("Thread panicked") {
             Ok(_) => println!("Maven compiled successfully"),
             Err(e) => eprintln!("Failed to compile Maven: {}", e),
         }
 
-        copy_db_files().unwrap();
+        copy_db_files()?;
         println!("{}", "Finished setting up environment for Intellij...".red());
         println!("{}", "Start the tomcat server from inside Intellij...".blue());
     }
+
+    Ok(())
 }
