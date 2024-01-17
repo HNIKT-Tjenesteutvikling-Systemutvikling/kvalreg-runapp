@@ -47,7 +47,7 @@ fn clean_up(register_name: &str) -> std::io::Result<()> {
 
         println!("\nAwaiting MySQL shutdown...");
         thread::sleep(Duration::from_secs(5));
-        println!("\n\n\n");
+        println!("\n\n");
 
         if fs::metadata("mysql/.my.cnf").is_ok() {
             fs::remove_file("mysql/.my.cnf")?;
@@ -80,19 +80,18 @@ fn clean_up(register_name: &str) -> std::io::Result<()> {
             fs::remove_dir_all("logs/*")?;
         }
 
-        println!("Stopped running processes");
+        println!("\nStopped running processes");
     } else {
-        println!("No local database found. Continuing...");
+        println!("\nNo local database found. Continuing...");
     }
 
     Ok(())
 }
 
 fn drop_database(register_name: &str) -> std::io::Result<()> {
-    println!("Starting to drop database...");
+    println!("\nStarting to drop database...");
 
     let mysql_drop_db = env::var("MYSQL_DROP_DB").expect("MYSQL_DROP_DB must be set");
-
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_ok() {
         println!("Dropping external database {}...", register_name);
         Command::new("mysql")
@@ -108,7 +107,7 @@ fn drop_database(register_name: &str) -> std::io::Result<()> {
     }
 
     if fs::metadata("mysql/data").is_ok() {
-        println!("Dropping local database...");
+        println!("\nDropping local database...");
         fs::remove_dir_all("mysql/data")?;
     }
 
@@ -131,7 +130,7 @@ fn drop_database(register_name: &str) -> std::io::Result<()> {
             fs::remove_dir_all("logs/*")?;
         }
     }
-    println!("Database dropped.");
+    println!("\n\nDatabase dropped.");
 
     Ok(())
 }
@@ -150,7 +149,7 @@ fn clean_local_credentials() -> std::io::Result<()> {
 }
 
 fn setup_local_database() -> std::io::Result<()> {
-    println!("Database setup...");
+    println!("\n\nDatabase setup...");
     println!("Setting up mysql in env...");
 
     if fs::metadata("mysql/data").is_err() {
@@ -159,10 +158,10 @@ fn setup_local_database() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
     } else {
-        println!("Local database already setup. Continuing...");
+        println!("\nLocal database already setup. Continuing...");
     }
 
-    println!("setting up mysqlcred...");
+    println!("\nsetting up mysqlcred...");
     Command::new("mysqlcred")
         .status()
         .expect("Failed to execute command");
@@ -171,15 +170,15 @@ fn setup_local_database() -> std::io::Result<()> {
 }
 
 fn setup_external_database(register_name: &str) -> std::io::Result<()> {
-    println!("setting up mysqlcred...");
+    println!("\n\nsetting up mysqlcred...");
 
     Command::new("mysqlcred")
         .status()
         .expect("Failed to execute command");
 
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_err() {
-        println!("No database found. Creating...");
-        println!("Setting up root...");
+        println!("\nNo database found. Creating...");
+        println!("\nSetting up root...");
 
         let mysql_create_db = env::var("MYSQL_CREATE_DB").expect("MYSQL_CREATE_DB must be set");
         Command::new("mysql")
@@ -188,10 +187,10 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
 
-        println!("Creating database {}...", register_name);
+        println!("\nCreating database {}...", register_name);
         fs::File::create(format!("mysql/{}.sql", register_name))?;
     } else {
-        println!("Local database already setup. Continuing...");
+        println!("\nLocal database already setup. Continuing...");
 
         let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
         Command::new("mysql")
@@ -206,14 +205,13 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
 
 fn start_database() -> std::io::Result<()> {
     let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
-
     if fs::metadata("mysql/socket.lock").is_err() && Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
         println!("Starting MySQL as no socket.lock file and MySQL is not running...");
         Command::new("start_mysql")
             .status()
             .expect("Failed to execute command");
 
-        println!("Setting load local inline files permissions...");
+        println!("\nSetting load local inline files permissions...");
         Command::new("mysql")
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
@@ -234,7 +232,7 @@ fn start_database() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
     } else if fs::metadata("mysql/socket.lock").is_err() && !Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
-        println!("MySQL is running, but no socket.lock file found. Killing MySQL and restarting...");
+        println!("\nMySQL is running, but no socket.lock file found. Killing MySQL and restarting...");
         Command::new("pkill")
             .arg("mysqld")
             .status()
@@ -245,7 +243,7 @@ fn start_database() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
 
-        println!("Setting load local inline files permissions...");
+        println!("\nSetting load local inline files permissions...");
         Command::new("mysql")
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
@@ -262,7 +260,7 @@ fn start_database() -> std::io::Result<()> {
 
 fn compile_maven() -> std::io::Result<()> {
     if fs::metadata("target").is_err() {
-        println!("No target directory found...");
+        println!("\nNo target directory found...");
         Command::new("mvn")
             .arg("clean")
             .arg("install")
@@ -270,7 +268,7 @@ fn compile_maven() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
     } else {
-        println!("Target directory found. Cleaning up...");
+        println!("\nTarget directory found. Cleaning up...");
         fs::remove_dir_all("target")?;
         Command::new("mvn")
             .arg("clean")
@@ -284,20 +282,20 @@ fn compile_maven() -> std::io::Result<()> {
 }
 
 fn start_tomcat(register_name: &str) -> std::io::Result<()> {
-    println!("Local environment detected...");
-    println!("Setting up Tomcat...");
+    println!("\n\nLocal environment detected...");
+    println!("\nSetting up Tomcat...");
 
     let catalina_home = env::var("CATALINA_HOME").unwrap();
     if fs::metadata(format!("{}/webapps/{}.war", catalina_home, register_name)).is_ok() {
-        println!("delete old war file...");
+        println!("\ndelete old war file...");
         fs::remove_file(format!("{}/webapps/{}.war", catalina_home, register_name))?;
     }
     if fs::metadata(format!("{}/webapps/{}", catalina_home, register_name)).is_ok() {
-        println!("delete webapps folder...");
+        println!("\ndelete webapps folder...");
         fs::remove_dir_all(format!("{}/webapps/{}", catalina_home, register_name))?;
     }
 
-    println!("Deploying new WAR...");
+    println!("\nDeploying new WAR...");
     fs::copy(format!("target/{}.war", register_name), format!("{}/webapps/{}.war", catalina_home, register_name))?;
 
     println!("Starting Tomcat...");
@@ -318,7 +316,7 @@ fn copy_db_files() -> std::io::Result<()> {
         fs::create_dir_all(&db_path)?;
     }
 
-    println!("Copying db files...");
+    println!("\nCopying db files...");
     Command::new("cp")
         .arg("-r")
         .arg("./src/main/resources/db/application/")
