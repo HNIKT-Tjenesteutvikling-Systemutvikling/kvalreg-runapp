@@ -90,7 +90,9 @@ fn drop_database(register_name: &str) -> std::io::Result<()> {
             .expect("Failed to execute command");
 
         std::thread::sleep(std::time::Duration::from_secs(1));
-        fs::remove_file(format!("mysql/{}.sql", register_name))?;
+        if fs::metadata(format!("mysql/{}.sql", register_name)).is_ok() {
+            fs::remove_file(format!("mysql/{}.sql", register_name))?;
+        }
     }
 
     if fs::metadata("mysql/data").is_ok() {
@@ -98,18 +100,24 @@ fn drop_database(register_name: &str) -> std::io::Result<()> {
         fs::remove_dir_all("mysql/data")?;
     }
 
+    let home_dir = env::var("HOME").unwrap();
     if fs::metadata("mysql/.my.cnf").is_ok() {
         fs::remove_file("mysql/.my.cnf")?;
-        fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
-    } else if fs::metadata(format!("{}/.my.cnf", env::var("HOME").unwrap())).is_ok() {
-        fs::remove_file(format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
+        if fs::metadata(format!("{}/.my.cnf", home_dir)).is_ok() {
+            fs::remove_file(format!("{}/.my.cnf", home_dir))?;
+        }
+    } else if fs::metadata(format!("{}/.my.cnf", home_dir)).is_ok() {
+        fs::remove_file(format!("{}/.my.cnf", home_dir))?;
     }
 
-    if fs::metadata(format!("{}/bin/src", env::var("CATALINA_HOME").unwrap())).is_ok() {
-        fs::remove_dir_all(format!("{}/bin/src/*", env::var("CATALINA_HOME").unwrap()))?;
-        fs::remove_dir_all(format!("{}/logs/*", env::var("CATALINA_HOME").unwrap()))?;
-        fs::remove_dir_all(format!("{}/webapps/*", env::var("CATALINA_HOME").unwrap()))?;
-        fs::remove_dir_all("logs/*")?;
+    let catalina_home = env::var("CATALINA_HOME").unwrap();
+    if fs::metadata(format!("{}/bin/src", catalina_home)).is_ok() {
+        fs::remove_dir_all(format!("{}/bin/src/*", catalina_home))?;
+        fs::remove_dir_all(format!("{}/logs/*", catalina_home))?;
+        fs::remove_dir_all(format!("{}/webapps/*", catalina_home))?;
+        if fs::metadata("logs/*").is_ok() {
+            fs::remove_dir_all("logs/*")?;
+        }
     }
     println!("Database dropped.");
 
@@ -132,12 +140,6 @@ fn clean_local_credentials() -> std::io::Result<()> {
 fn setup_local_database() -> std::io::Result<()> {
     println!("Database setup...");
     println!("Setting up mysql in env...");
-
-    // let mysql_setup = env::var("MYSQL_SETUP").expect("MYSQL_SETUP must be set");
-    // println!("Running mysql setup\n\n");
-    // Command::new(mysql_setup)
-    //     .status()
-    //     .expect("Failed to execute command");
 
     if fs::metadata("mysql/data").is_err() {
         println!("No database found. Creating...");
@@ -274,8 +276,12 @@ fn start_tomcat(register_name: &str) -> std::io::Result<()> {
     println!("Setting up Tomcat...");
 
     let catalina_home = env::var("CATALINA_HOME").unwrap();
-    fs::remove_file(format!("{}/webapps/{}.war", catalina_home, register_name))?;
-    fs::remove_dir_all(format!("{}/webapps/{}", catalina_home, register_name))?;
+    if fs::metadata(format!("{}/webapps/{}.war", catalina_home, register_name)).is_ok() {
+        fs::remove_file(format!("{}/webapps/{}.war", catalina_home, register_name))?;
+    }
+    if fs::metadata(format!("{}/webapps/{}", catalina_home, register_name)).is_ok() {
+        fs::remove_dir_all(format!("{}/webapps/{}", catalina_home, register_name))?;
+    }
 
     println!("Deploying new WAR...");
     fs::copy(format!("target/{}.war", register_name), format!("{}/webapps/{}.war", catalina_home, register_name))?;
