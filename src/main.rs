@@ -78,11 +78,13 @@ fn clean_up(register_name: &str) -> std::io::Result<()> {
 fn drop_database(register_name: &str) -> std::io::Result<()> {
     println!("Starting to drop database...");
 
+    let mysql_drop_db = env::var("MYSQL_DROP_DB").expect("MYSQL_DROP_DB must be set");
+
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_ok() {
         println!("Dropping external database {}...", register_name);
         Command::new("mysql")
             .arg("<")
-            .arg("mysql_drop_db")
+            .arg(&mysql_drop_db)
             .status()
             .expect("Failed to execute command");
 
@@ -130,7 +132,8 @@ fn setup_local_database() -> std::io::Result<()> {
     println!("Database setup...");
     println!("Setting up mysql in env...");
 
-    Command::new("mysql_setup")
+    let mysql_setup = env::var("MYSQL_SETUP").expect("MYSQL_SETUP must be set");
+    Command::new(mysql_setup)
         .status()
         .expect("Failed to execute command");
 
@@ -150,6 +153,7 @@ fn setup_local_database() -> std::io::Result<()> {
 
     Ok(())
 }
+
 fn setup_external_database(register_name: &str) -> std::io::Result<()> {
     println!("setting up mysqlcred...");
 
@@ -160,9 +164,11 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_err() {
         println!("No database found. Creating...");
         println!("Setting up root...");
+
+        let mysql_create_db = env::var("MYSQL_CREATE_DB").expect("MYSQL_CREATE_DB must be set");
         Command::new("mysql")
             .arg("<")
-            .arg("mysql_create_db")
+            .arg(mysql_create_db)
             .status()
             .expect("Failed to execute command");
 
@@ -170,9 +176,11 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
         fs::File::create(format!("mysql/{}.sql", register_name))?;
     } else {
         println!("Local database already setup. Continuing...");
+
+        let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
         Command::new("mysql")
             .arg("<")
-            .arg("mysql_local_load_file")
+            .arg(mysql_local_load_file)
             .status()
             .expect("Failed to execute command");
     }
@@ -181,6 +189,8 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
 }
 
 fn start_database() -> std::io::Result<()> {
+    let mysql_local_load_file = env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
+
     if fs::metadata("mysql/socket.lock").is_err() && Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
         println!("Starting MySQL as no socket.lock file and MySQL is not running...");
         Command::new("start_mysql")
@@ -192,7 +202,7 @@ fn start_database() -> std::io::Result<()> {
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
             .arg("<")
-            .arg("mysql_local_load_file")
+            .arg(&mysql_local_load_file)
             .status()
             .expect("Failed to execute command");
 
@@ -204,7 +214,7 @@ fn start_database() -> std::io::Result<()> {
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
             .arg("<")
-            .arg("mysql_local_load_file")
+            .arg(&mysql_local_load_file)
             .status()
             .expect("Failed to execute command");
     } else if fs::metadata("mysql/socket.lock").is_err() && !Command::new("pgrep").arg("mysqld").output()?.stdout.is_empty() {
@@ -224,7 +234,7 @@ fn start_database() -> std::io::Result<()> {
             .arg("-S")
             .arg("MYSQL_UNIX_PORT")
             .arg("<")
-            .arg("mysql_local_load_file")
+            .arg(&mysql_local_load_file)
             .status()
             .expect("Failed to execute command");
 
