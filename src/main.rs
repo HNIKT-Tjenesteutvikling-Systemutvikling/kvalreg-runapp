@@ -379,6 +379,8 @@ async fn main() -> std::io::Result<()> {
     let register: Register = from_str(output_str).expect("Failed to parse JSON");
     let register_name = register.register_name;
 
+    let mut handles = Vec::new();
+
     if let Some(_matches) = matches.subcommand_matches("local") {
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat")
@@ -391,11 +393,9 @@ async fn main() -> std::io::Result<()> {
         let compile_maven_task = task::spawn(async {
             compile_maven().expect("Failed to compile Maven");
         });
+        handles.push(compile_maven_task);
 
         start_tomcat(&register_name)?;
-
-        compile_maven_task.await.unwrap();
-
         println!("{}", "Finished setting up environment for local...".green());
     } else if let Some(_matches) = matches.subcommand_matches("code") {
         println!("{}", "Stopping running services...".red());
@@ -408,11 +408,9 @@ async fn main() -> std::io::Result<()> {
         let compile_maven_task = task::spawn(async {
             compile_maven().expect("Failed to compile Maven");
         });
+        handles.push(compile_maven_task);
 
         start_tomcat(&register_name)?;
-
-        compile_maven_task.await.unwrap();
-
         println!(
             "{}",
             "Finished setting up environment for VScode...".green()
@@ -430,6 +428,7 @@ async fn main() -> std::io::Result<()> {
         let compile_maven_task = task::spawn(async {
             compile_maven().expect("Failed to compile Maven");
         });
+        handles.push(compile_maven_task);
 
         Command::new("docker")
             .arg("build")
@@ -443,8 +442,6 @@ async fn main() -> std::io::Result<()> {
             .arg("-d")
             .status()
             .expect("Failed to execute command");
-
-        compile_maven_task.await.unwrap();
 
         println!(
             "{}",
@@ -464,10 +461,9 @@ async fn main() -> std::io::Result<()> {
         let compile_maven_task = task::spawn(async {
             compile_maven().expect("Failed to compile Maven");
         });
+        handles.push(compile_maven_task);
 
         copy_db_files()?;
-
-        compile_maven_task.await.unwrap();
 
         println!(
             "{}",
@@ -477,6 +473,11 @@ async fn main() -> std::io::Result<()> {
             "{}",
             "Start the tomcat server from inside Intellij...".blue()
         );
+    }
+
+    // Await all tasks at the end
+    for handle in handles {
+        let _ = handle.await;
     }
 
     Ok(())
