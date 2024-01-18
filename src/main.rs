@@ -8,9 +8,9 @@ use std::io;
 use std::path::Path;
 use std::process::Command;
 use std::str;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::sync::Arc;
 
 extern crate dirs;
 
@@ -188,12 +188,9 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
 
     if fs::metadata(format!("mysql/{}.sql", register_name)).is_err() {
         println!("{}", "No database found. Creating...".red());
-        println!("{}", "Setting up root...".on_bright_cyan());
+        println!("{}", "Setting up root...".yellow());
 
-        let mysql_create_db = env::var("MYSQL_CREATE_DB").expect("MYSQL_CREATE_DB must be set");
-        let status = Command::new("mysql")
-            .arg("<")
-            .arg(mysql_create_db)
+        let status = Command::new("mysqlinit_remote")
             .status()
             .expect("Failed to execute command");
         if !status.success() {
@@ -208,11 +205,7 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
     } else {
         println!("{}", "Local database already setup. Continuing...".yellow());
 
-        let mysql_local_load_file =
-            env::var("MYSQL_LOCAL_LOAD_FILE").expect("MYSQL_LOCAL_LOAD_FILE must be set");
-        let status = Command::new("mysql")
-            .arg("<")
-            .arg(mysql_local_load_file)
+        let status = Command::new("mysql_local_load_file")
             .status()
             .expect("Failed to execute command");
         if !status.success() {
