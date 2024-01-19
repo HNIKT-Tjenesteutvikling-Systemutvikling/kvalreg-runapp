@@ -67,10 +67,12 @@ fn clean_up(register_name: &str) -> io::Result<()> {
         }
 
         println!("{}", "\nAwaiting MySQL shutdown...\n".red());
+        println!("{}", "Cleaning up files...".yellow());
         thread::sleep(Duration::from_secs(5));
 
         let home_dir = dirs::home_dir().expect("Home directory not found");
         let my_cnf_path = home_dir.join(".my.cnf");
+
         remove_if_exists(my_cnf_path.to_str().unwrap())?;
         remove_if_exists("mysql/.my.cnf")?;
         remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
@@ -132,11 +134,15 @@ fn drop_database(register_name: &str) -> io::Result<()> {
 fn clean_local_credentials() -> std::io::Result<()> {
     let home_dir = dirs::home_dir().expect("Home directory not found");
     let my_cnf_path = home_dir.join(".my.cnf");
+    let mysql_my_cnf_path = Path::new("mysql/.my.cnf");
 
     println!("{}", "Cleaning up local credentials...".bright_blue());
-    remove_if_exists("mysql/.my.cnf")?;
-    remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
-    remove_if_exists(my_cnf_path.to_str().unwrap())?;
+    if mysql_my_cnf_path.exists() {
+        remove_if_exists(mysql_my_cnf_path.to_str().unwrap())?;
+        remove_if_exists(my_cnf_path.to_str().unwrap())?;
+    } else if my_cnf_path.exists() {
+        remove_if_exists(my_cnf_path.to_str().unwrap())?;
+    }
 
     Ok(())
 }
