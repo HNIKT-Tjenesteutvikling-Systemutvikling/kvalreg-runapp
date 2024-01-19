@@ -285,10 +285,12 @@ fn start_database() -> std::io::Result<()> {
         "{}",
         "Setting load local inline files permissions...".yellow()
     );
+    thread::sleep(Duration::from_secs(3));
     Command::new("mysql_infile")
         .env("MYSQL_UNIX_PORT", &mysql_unix_port)
         .status()
         .expect("Failed to execute command");
+    thread::sleep(Duration::from_secs(3));
 
     Ok(())
 }
