@@ -130,10 +130,13 @@ fn drop_database(register_name: &str) -> io::Result<()> {
 }
 
 fn clean_local_credentials() -> std::io::Result<()> {
-    println!("{}", "Cleaning up local credentials...".bright_blue());
+    let home_dir = dirs::home_dir().expect("Home directory not found");
+    let my_cnf_path = home_dir.join(".my.cnf");
 
+    println!("{}", "Cleaning up local credentials...".bright_blue());
     remove_if_exists("mysql/.my.cnf")?;
     remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
+    remove_if_exists(my_cnf_path.to_str().unwrap())?;
 
     Ok(())
 }
