@@ -24,13 +24,17 @@ fn remove_if_exists(path: &str) -> io::Result<()> {
     let path = Path::new(path);
     if path.exists() {
         if path.is_dir() {
-            fs::remove_dir_all(path)
+            for entry in fs::read_dir(path)? {
+                let entry = entry?;
+                if entry.path().is_file() {
+                    fs::remove_file(entry.path())?;
+                }
+            }
         } else {
-            fs::remove_file(path)
+            fs::remove_file(path)?;
         }
-    } else {
-        Ok(())
     }
+    Ok(())
 }
 
 fn clean_up(register_name: &str) -> io::Result<()> {
