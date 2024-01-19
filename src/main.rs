@@ -140,10 +140,16 @@ fn setup_local_database(register_name: &str) -> std::io::Result<()> {
 
     let mysql_user = register_name;
     let mysql_password = register_name;
-    let mysql_unix_port = format!("{}/mysql/socket", std::env::var("PWD").unwrap());
+    let mysql_dir = format!("{}/mysql", std::env::var("PWD").unwrap());
+    let mysql_unix_port = format!("{}/socket", &mysql_dir);
     let mysql_database = register_name;
 
-    if fs::metadata("mysql/data").is_err() {
+    // Create the mysql directory if it does not exist
+    if fs::metadata(&mysql_dir).is_err() {
+        fs::create_dir_all(&mysql_dir)?;
+    }
+
+    if fs::metadata(format!("{}/data", &mysql_dir)).is_err() {
         println!("{}", "No database found. Creating...".red());
         let status = Command::new("mysqlinit")
             .env("MYSQL_USER", mysql_user)
