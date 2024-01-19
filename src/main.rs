@@ -114,13 +114,11 @@ fn drop_database(register_name: &str) -> io::Result<()> {
         remove_if_exists(&format!("mysql/{}.sql", register_name))?;
     }
 
-    remove_if_exists("mysql/data")?;
-
     let home_dir = dirs::home_dir().expect("Home directory not found");
     let my_cnf_path = home_dir.join(".my.cnf");
-    remove_if_exists(my_cnf_path.to_str().unwrap())?;
-
     let catalina_home = env::var("CATALINA_HOME").unwrap();
+    remove_if_exists("mysql/data")?;
+    remove_if_exists(my_cnf_path.to_str().unwrap())?;
     remove_if_exists(&format!("{}/bin/src/*", catalina_home))?;
     remove_if_exists(&format!("{}/logs/*", catalina_home))?;
     remove_if_exists(&format!("{}/webapps/*", catalina_home))?;
@@ -136,14 +134,9 @@ fn clean_local_credentials() -> std::io::Result<()> {
     let my_cnf_path = home_dir.join(".my.cnf");
     let mysql_my_cnf_path = Path::new("mysql/.my.cnf");
     println!("{}", my_cnf_path.to_str().unwrap());
-
-    println!("{}", "Cleaning up local credentials...".bright_blue());
-    if mysql_my_cnf_path.exists() {
-        remove_if_exists(mysql_my_cnf_path.to_str().unwrap())?;
-        remove_if_exists(my_cnf_path.to_str().unwrap())?;
-    } else if my_cnf_path.exists() {
-        remove_if_exists(my_cnf_path.to_str().unwrap())?;
-    }
+    println!("{}", "Cleaning up mysql credentials...".yellow());
+    remove_if_exists(my_cnf_path.to_str().unwrap())?;
+    remove_if_exists(mysql_my_cnf_path.to_str().unwrap())?;
 
     Ok(())
 }
