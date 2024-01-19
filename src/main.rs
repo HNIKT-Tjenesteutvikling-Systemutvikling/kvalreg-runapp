@@ -133,7 +133,7 @@ fn drop_database(register_name: &str) -> io::Result<()> {
 
 fn clean_local_credentials() -> std::io::Result<()> {
     let home_dir = dirs::home_dir().expect("Home directory not found");
-    let my_cnf_path = home_dir.join("./.my.cnf");
+    let my_cnf_path = home_dir.join(".my.cnf");
     let mysql_my_cnf_path = Path::new("mysql/.my.cnf");
     println!("{}", my_cnf_path.to_str().unwrap());
 
