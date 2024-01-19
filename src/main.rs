@@ -134,28 +134,30 @@ fn clean_local_credentials() -> std::io::Result<()> {
     Ok(())
 }
 
+fn set_mysql_envs<'a>(command: &'a mut Command, register_name: &str) -> &'a mut Command {
+    let mysql_dir = format!("{}/mysql", std::env::var("PWD").unwrap());
+    let mysql_unix_port = format!("{}/socket", &mysql_dir);
+
+    command
+        .env("MYSQL_USER", register_name)
+        .env("MYSQL_PASSWORD", register_name)
+        .env("MYSQL_UNIX_PORT", &mysql_unix_port)
+        .env("MYSQL_DATABASE", register_name)
+}
+
 fn setup_local_database(register_name: &str) -> std::io::Result<()> {
     println!("{}", "\nDatabase setup...".bright_blue());
     println!("{}", "Setting up mysql in env...".yellow());
 
-    let mysql_user = register_name;
-    let mysql_password = register_name;
     let mysql_dir = format!("{}/mysql", std::env::var("PWD").unwrap());
-    let mysql_unix_port = format!("{}/socket", &mysql_dir);
-    let mysql_database = register_name;
-
-    // Create the mysql directory if it does not exist
     if fs::metadata(&mysql_dir).is_err() {
         fs::create_dir_all(&mysql_dir)?;
     }
 
     if fs::metadata(format!("{}/data", &mysql_dir)).is_err() {
         println!("{}", "No database found. Creating...".red());
-        let status = Command::new("mysqlinit")
-            .env("MYSQL_USER", mysql_user)
-            .env("MYSQL_PASSWORD", mysql_password)
-            .env("MYSQL_UNIX_PORT", &mysql_unix_port)
-            .env("MYSQL_DATABASE", mysql_database)
+        let mut command = Command::new("mysqlinit");
+        let status = set_mysql_envs(&mut command, register_name)
             .status()
             .expect("Failed to execute command");
         if !status.success() {
@@ -172,11 +174,8 @@ fn setup_local_database(register_name: &str) -> std::io::Result<()> {
     }
 
     println!("{}", "setting up mysqlcred...".yellow());
-    let status = Command::new("mysqlcred")
-        .env("MYSQL_USER", mysql_user)
-        .env("MYSQL_PASSWORD", mysql_password)
-        .env("MYSQL_UNIX_PORT", &mysql_unix_port)
-        .env("MYSQL_DATABASE", mysql_database)
+    let mut command = Command::new("mysqlcred");
+    let status = set_mysql_envs(&mut command, register_name)
         .status()
         .expect("Failed to execute command");
     if !status.success() {
@@ -245,21 +244,14 @@ fn start_database(register_name: &str) -> std::io::Result<()> {
         .stdout
         .is_empty();
 
-    let mysql_user = register_name;
-    let mysql_password = register_name;
-    let mysql_database = register_name;
-
     match (socket_lock_exists, mysql_running) {
         (false, false) => {
             println!(
                 "{}",
                 "Starting MySQL as no socket.lock file and MySQL is not running...".bright_blue()
             );
-            Command::new("start_mysql")
-                .env("MYSQL_USER", mysql_user)
-                .env("MYSQL_PASSWORD", mysql_password)
-                .env("MYSQL_UNIX_PORT", &mysql_unix_port)
-                .env("MYSQL_DATABASE", mysql_database)
+            let mut command = Command::new("start_mysql");
+            set_mysql_envs(&mut command, register_name)
                 .status()
                 .expect("Failed to execute command");
             thread::sleep(Duration::from_secs(3));
@@ -281,11 +273,8 @@ fn start_database(register_name: &str) -> std::io::Result<()> {
                 .status()
                 .expect("Failed to execute command");
             thread::sleep(Duration::from_secs(3));
-            Command::new("start_mysql")
-                .env("MYSQL_USER", mysql_user)
-                .env("MYSQL_PASSWORD", mysql_password)
-                .env("MYSQL_UNIX_PORT", &mysql_unix_port)
-                .env("MYSQL_DATABASE", mysql_database)
+            let mut command = Command::new("start_mysql");
+            set_mysql_envs(&mut command, register_name)
                 .status()
                 .expect("Failed to execute command");
             thread::sleep(Duration::from_secs(3));
@@ -298,7 +287,8 @@ fn start_database(register_name: &str) -> std::io::Result<()> {
         "Setting load local inline files permissions...".yellow()
     );
     thread::sleep(Duration::from_secs(3));
-    Command::new("mysql_infile")
+    let mut command = Command::new("mysql_infile");
+    command
         .env("MYSQL_UNIX_PORT", &mysql_unix_port)
         .status()
         .expect("Failed to execute command");
