@@ -134,22 +134,22 @@ fn clean_local_credentials() -> std::io::Result<()> {
     Ok(())
 }
 
-fn setup_local_database() -> std::io::Result<()> {
+fn setup_local_database(register_name: &str) -> std::io::Result<()> {
     println!("{}", "\nDatabase setup...".bright_blue());
     println!("{}", "Setting up mysql in env...".yellow());
 
-    let mysql_user = std::env::var("MYSQL_USER").expect("MYSQL_USER not set");
-    let mysql_password = std::env::var("MYSQL_PASSWORD").expect("MYSQL_PASSWORD not set");
-    let mysql_unix_port = std::env::var("MYSQL_UNIX_PORT").expect("MYSQL_UNIX_PORT not set");
-    let mysql_database = std::env::var("MYSQL_DATABASE").expect("MYSQL_DATABASE not set");
+    let mysql_user = register_name;
+    let mysql_password = register_name;
+    let mysql_unix_port = format!("{}/mysql/socket", std::env::var("PWD").unwrap());
+    let mysql_database = register_name;
 
     if fs::metadata("mysql/data").is_err() {
         println!("{}", "No database found. Creating...".red());
         let status = Command::new("mysqlinit")
-            .env("MYSQL_USER", &mysql_user)
-            .env("MYSQL_PASSWORD", &mysql_password)
+            .env("MYSQL_USER", mysql_user)
+            .env("MYSQL_PASSWORD", mysql_password)
             .env("MYSQL_UNIX_PORT", &mysql_unix_port)
-            .env("MYSQL_DATABASE", &mysql_database)
+            .env("MYSQL_DATABASE", mysql_database)
             .status()
             .expect("Failed to execute command");
         if !status.success() {
@@ -167,10 +167,10 @@ fn setup_local_database() -> std::io::Result<()> {
 
     println!("{}", "setting up mysqlcred...".yellow());
     let status = Command::new("mysqlcred")
-        .env("MYSQL_USER", &mysql_user)
-        .env("MYSQL_PASSWORD", &mysql_password)
+        .env("MYSQL_USER", mysql_user)
+        .env("MYSQL_PASSWORD", mysql_password)
         .env("MYSQL_UNIX_PORT", &mysql_unix_port)
-        .env("MYSQL_DATABASE", &mysql_database)
+        .env("MYSQL_DATABASE", mysql_database)
         .status()
         .expect("Failed to execute command");
     if !status.success() {
@@ -405,7 +405,7 @@ fn main() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
         clean_local_credentials()?;
-        setup_local_database()?;
+        setup_local_database(&register_name)?;
         start_database()?;
 
         let register_name_clone = Arc::clone(&register_name);
@@ -437,7 +437,7 @@ fn main() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
         clean_local_credentials()?;
-        setup_local_database()?;
+        setup_local_database(&register_name)?;
         start_database()?;
 
         let register_name_clone = Arc::clone(&register_name);
