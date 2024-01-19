@@ -141,9 +141,18 @@ fn setup_local_database() -> std::io::Result<()> {
     println!("{}", "\nDatabase setup...".bright_blue());
     println!("{}", "Setting up mysql in env...".yellow());
 
+    let mysql_user = std::env::var("MYSQL_USER").expect("MYSQL_USER not set");
+    let mysql_password = std::env::var("MYSQL_PASSWORD").expect("MYSQL_PASSWORD not set");
+    let mysql_unix_port = std::env::var("MYSQL_UNIX_PORT").expect("MYSQL_UNIX_PORT not set");
+    let mysql_database = std::env::var("MYSQL_DATABASE").expect("MYSQL_DATABASE not set");
+
     if fs::metadata("mysql/data").is_err() {
         println!("{}", "No database found. Creating...".red());
         let status = Command::new("mysqlinit")
+            .env("MYSQL_USER", &mysql_user)
+            .env("MYSQL_PASSWORD", &mysql_password)
+            .env("MYSQL_UNIX_PORT", &mysql_unix_port)
+            .env("MYSQL_DATABASE", &mysql_database)
             .status()
             .expect("Failed to execute command");
         if !status.success() {
@@ -161,6 +170,10 @@ fn setup_local_database() -> std::io::Result<()> {
 
     println!("{}", "setting up mysqlcred...".yellow());
     let status = Command::new("mysqlcred")
+        .env("MYSQL_USER", &mysql_user)
+        .env("MYSQL_PASSWORD", &mysql_password)
+        .env("MYSQL_UNIX_PORT", &mysql_unix_port)
+        .env("MYSQL_DATABASE", &mysql_database)
         .status()
         .expect("Failed to execute command");
     if !status.success() {
@@ -332,6 +345,27 @@ fn start_tomcat(register_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
+fn copy_dir_to(src_dir: &Path, dst_dir: &Path) -> std::io::Result<()> {
+    if !dst_dir.is_dir() {
+        fs::create_dir_all(dst_dir)?;
+    }
+
+    for entry_result in src_dir.read_dir()? {
+        let entry = entry_result?;
+        let file_type = entry.file_type()?;
+        let src_path = entry.path();
+        let dst_path = dst_dir.join(entry.file_name());
+
+        if file_type.is_file() {
+            fs::copy(src_path, dst_path)?;
+        } else if file_type.is_dir() {
+            copy_dir_to(&src_path, &dst_path)?;
+        }
+    }
+
+    Ok(())
+}
+
 fn copy_db_files() -> std::io::Result<()> {
     let catalina_home = env::var("CATALINA_HOME").unwrap();
     let db_path = format!("{}/bin/src/main/resources/db/application", catalina_home);
@@ -343,7 +377,8 @@ fn copy_db_files() -> std::io::Result<()> {
     }
 
     println!("{}", "Copying db files...".yellow());
-    fs::copy("./src/main/resources/db/application/", db_path)?;
+    let src_path = Path::new("./src/main/resources/db/application/");
+    copy_dir_to(&src_path, &db_path)?;
 
     Ok(())
 }
@@ -437,7 +472,7 @@ fn main() -> std::io::Result<()> {
         clean_local_credentials()?;
         setup_external_database(&*register_name)?;
 
-        let register_name_clone = Arc::clone(&register_name);
+        let _register_name_clone = Arc::clone(&register_name);
         let handle = thread::spawn(move || {
             compile_maven().unwrap();
             copy_db_files().unwrap();
