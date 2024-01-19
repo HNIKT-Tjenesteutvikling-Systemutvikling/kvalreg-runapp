@@ -236,6 +236,8 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
 }
 
 fn start_database() -> std::io::Result<()> {
+    let mysql_dir = format!("{}/mysql", std::env::var("PWD").unwrap());
+    let mysql_unix_port = format!("{}/socket", &mysql_dir);
     let socket_lock_exists = fs::metadata("mysql/socket.lock").is_ok();
     let mysql_running = !Command::new("pgrep")
         .arg("mysqld")
@@ -284,6 +286,7 @@ fn start_database() -> std::io::Result<()> {
         "Setting load local inline files permissions...".yellow()
     );
     Command::new("mysql_infile")
+        .env("MYSQL_UNIX_PORT", &mysql_unix_port)
         .status()
         .expect("Failed to execute command");
 
