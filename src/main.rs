@@ -235,7 +235,7 @@ fn setup_external_database(register_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn start_database() -> std::io::Result<()> {
+fn start_database(register_name: &str) -> std::io::Result<()> {
     let mysql_dir = format!("{}/mysql", std::env::var("PWD").unwrap());
     let mysql_unix_port = format!("{}/socket", &mysql_dir);
     let socket_lock_exists = fs::metadata("mysql/socket.lock").is_ok();
@@ -245,6 +245,10 @@ fn start_database() -> std::io::Result<()> {
         .stdout
         .is_empty();
 
+    let mysql_user = register_name;
+    let mysql_password = register_name;
+    let mysql_database = register_name;
+
     match (socket_lock_exists, mysql_running) {
         (false, false) => {
             println!(
@@ -252,6 +256,10 @@ fn start_database() -> std::io::Result<()> {
                 "Starting MySQL as no socket.lock file and MySQL is not running...".bright_blue()
             );
             Command::new("start_mysql")
+                .env("MYSQL_USER", mysql_user)
+                .env("MYSQL_PASSWORD", mysql_password)
+                .env("MYSQL_UNIX_PORT", &mysql_unix_port)
+                .env("MYSQL_DATABASE", mysql_database)
                 .status()
                 .expect("Failed to execute command");
             thread::sleep(Duration::from_secs(3));
@@ -274,6 +282,10 @@ fn start_database() -> std::io::Result<()> {
                 .expect("Failed to execute command");
             thread::sleep(Duration::from_secs(3));
             Command::new("start_mysql")
+                .env("MYSQL_USER", mysql_user)
+                .env("MYSQL_PASSWORD", mysql_password)
+                .env("MYSQL_UNIX_PORT", &mysql_unix_port)
+                .env("MYSQL_DATABASE", mysql_database)
                 .status()
                 .expect("Failed to execute command");
             thread::sleep(Duration::from_secs(3));
@@ -417,7 +429,7 @@ fn main() -> std::io::Result<()> {
             .expect("Failed to execute command");
         clean_local_credentials()?;
         setup_local_database(&register_name)?;
-        start_database()?;
+        start_database(&register_name)?;
 
         let register_name_clone = Arc::clone(&register_name);
         let handle = thread::spawn(move || {
@@ -449,7 +461,7 @@ fn main() -> std::io::Result<()> {
             .expect("Failed to execute command");
         clean_local_credentials()?;
         setup_local_database(&register_name)?;
-        start_database()?;
+        start_database(&register_name)?;
 
         let register_name_clone = Arc::clone(&register_name);
         let handle = thread::spawn(move || {
