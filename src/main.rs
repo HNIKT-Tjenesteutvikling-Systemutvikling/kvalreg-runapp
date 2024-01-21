@@ -4,9 +4,10 @@ use serde::Deserialize;
 use serde_json::from_str;
 use std::env;
 use std::fs;
+use std::fs::File;
 use std::io;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::str;
 use std::sync::Arc;
 use std::thread;
@@ -133,10 +134,12 @@ fn clean_local_credentials() -> std::io::Result<()> {
     let home_dir = dirs::home_dir().expect("Home directory not found");
     let my_cnf_path = home_dir.join(".my.cnf");
     let mysql_my_cnf_path = Path::new("mysql/.my.cnf");
+    let mvn_compile_log_path = Path::new("tomcat/compile_log.txt");
     println!("{}", my_cnf_path.to_str().unwrap());
     println!("{}", "Cleaning up mysql credentials...".yellow());
     remove_if_exists(my_cnf_path.to_str().unwrap())?;
     remove_if_exists(mysql_my_cnf_path.to_str().unwrap())?;
+    remove_if_exists(mvn_compile_log_path.to_str().unwrap())?;
 
     Ok(())
 }
@@ -316,10 +319,13 @@ fn compile_maven() -> std::io::Result<()> {
 
     let mvn_command = if target_exists { "package" } else { "install" };
 
+    let file = File::create("tomcat/compile_log.txt")?;
+
     Command::new("mvn")
         .arg("clean")
         .arg(mvn_command)
         .arg("-DskipTests")
+        .stdout(Stdio::from(file))
         .status()
         .expect("Failed to execute command");
 
@@ -417,61 +423,50 @@ fn main() -> std::io::Result<()> {
     let register: Register = from_str(output_str).expect("Failed to parse JSON");
     let register_name = Arc::new(register.register_name);
 
-    let mut handles = vec![];
-
     if let Some(_matches) = matches.subcommand_matches("local") {
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat")
             .status()
             .expect("Failed to execute command");
+        let handle = thread::spawn(|| {
+            compile_maven().unwrap();
+        });
         clean_local_credentials()?;
         setup_local_database(&register_name)?;
         start_database(&register_name)?;
-
-        let register_name_clone = Arc::clone(&register_name);
-        let handle = thread::spawn(move || {
-            compile_maven().unwrap();
-            start_tomcat(&*register_name_clone).unwrap();
-        });
-
-        handles.push(handle);
+        handle.join().unwrap();
+        start_tomcat(&*register_name)?;
     } else if let Some(_matches) = matches.subcommand_matches("code") {
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat")
             .status()
             .expect("Failed to execute command");
+        let handle = thread::spawn(|| {
+            compile_maven().unwrap();
+        });
         clean_local_credentials()?;
         setup_external_database(&*register_name)?;
-
-        let register_name_clone = Arc::clone(&register_name);
-        let handle = thread::spawn(move || {
-            compile_maven().unwrap();
-            start_tomcat(&*register_name_clone).unwrap();
-        });
-
-        handles.push(handle);
+        handle.join().unwrap();
+        start_tomcat(&*register_name)?;
     } else if let Some(_matches) = matches.subcommand_matches("docker") {
         println!("{}", "Stopping running services...".red());
         Command::new("docker-compose")
             .arg("down")
             .status()
             .expect("Failed to execute command");
+        let handle = thread::spawn(|| {
+            compile_maven().unwrap();
+        });
         clean_local_credentials()?;
         setup_local_database(&register_name)?;
         start_database(&register_name)?;
-
-        let register_name_clone = Arc::clone(&register_name);
-        let handle = thread::spawn(move || {
-            compile_maven().unwrap();
-            Command::new("docker")
-                .arg("build")
-                .arg("-t")
-                .arg(format!("{}:latest", &*register_name_clone))
-                .status()
-                .expect("Failed to execute command");
-        });
-
-        handles.push(handle);
+        handle.join().unwrap();
+        Command::new("docker")
+            .arg("build")
+            .arg("-t")
+            .arg(format!("{}:latest", &*register_name))
+            .status()
+            .expect("Failed to execute command");
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
         clean_up(&*register_name)?;
         std::process::exit(0);
@@ -480,20 +475,13 @@ fn main() -> std::io::Result<()> {
         drop_database(&*register_name)?;
         std::process::exit(0);
     } else {
+        let handle = thread::spawn(|| {
+            compile_maven().unwrap();
+        });
         clean_local_credentials()?;
         setup_external_database(&*register_name)?;
-
-        let _register_name_clone = Arc::clone(&register_name);
-        let handle = thread::spawn(move || {
-            compile_maven().unwrap();
-            copy_db_files().unwrap();
-        });
-
-        handles.push(handle);
-    }
-
-    for handle in handles {
         handle.join().unwrap();
+        copy_db_files().unwrap();
     }
 
     Ok(())
