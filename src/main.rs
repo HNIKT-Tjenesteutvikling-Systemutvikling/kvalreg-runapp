@@ -6,6 +6,7 @@ use std::env;
 use std::fs;
 use std::fs::File;
 use std::io;
+use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::{Command, Stdio};
 use std::str;
@@ -307,27 +308,48 @@ fn start_database(register_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn compile_maven() -> std::io::Result<()> {
+fn compile_maven() -> Result<(), String> {
     let target_exists = fs::metadata("target").is_ok();
 
     if target_exists {
         println!("{}", "Target directory found. Cleaning up...".yellow());
-        fs::remove_dir_all("target")?;
+        fs::remove_dir_all("target").map_err(|e| e.to_string())?;
     } else {
         println!("{}", "No target directory found...".red());
     }
 
-    let mvn_command = if target_exists { "package" } else { "install" };
+    let mvn_command = if target_exists {
+        "package"
+    } else {
+        "clean install"
+    };
 
-    let file = File::create("tomcat/compile_log.txt")?;
+    let file = File::create("tomcat/compile_log.txt").map_err(|e| e.to_string())?;
 
-    Command::new("mvn")
-        .arg("clean")
-        .arg(mvn_command)
-        .arg("-DskipTests")
+    let status = Command::new("mvn")
+        .args(&[mvn_command, "-DskipTests"])
         .stdout(Stdio::from(file))
         .status()
-        .expect("Failed to execute command");
+        .map_err(|e| e.to_string())?;
+
+    if !status.success() {
+        let file = File::open("tomcat/compile_log.txt").map_err(|e| e.to_string())?;
+        let reader = BufReader::new(file);
+        let lines: Vec<String> = reader
+            .lines()
+            .collect::<Result<_, _>>()
+            .map_err(|e| e.to_string())?;
+        let last_50_lines = lines
+            .iter()
+            .rev()
+            .take(50)
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>();
+        return Err(format!(
+            "Maven compile failed. Last 50 lines of compile log:\n{}",
+            last_50_lines.join("\n")
+        ));
+    }
 
     Ok(())
 }
@@ -355,7 +377,7 @@ fn start_tomcat(register_name: &str) -> std::io::Result<()> {
     println!("Starting Tomcat...");
     Command::new("sh")
         .arg("-c")
-        .arg("start_tomcat")
+        .arg(format!("{}/bin/catalina.sh jpda start", catalina_home))
         .status()
         .expect("Failed to execute command");
 
@@ -429,7 +451,7 @@ fn main() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
         let handle = thread::spawn(|| {
-            compile_maven().unwrap();
+            compile_maven().expect("Failed to compile Maven");
         });
         clean_local_credentials()?;
         setup_local_database(&register_name)?;
@@ -442,7 +464,7 @@ fn main() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
         let handle = thread::spawn(|| {
-            compile_maven().unwrap();
+            compile_maven().expect("Failed to compile Maven");
         });
         clean_local_credentials()?;
         setup_external_database(&*register_name)?;
@@ -455,7 +477,7 @@ fn main() -> std::io::Result<()> {
             .status()
             .expect("Failed to execute command");
         let handle = thread::spawn(|| {
-            compile_maven().unwrap();
+            compile_maven().expect("Failed to compile Maven");
         });
         clean_local_credentials()?;
         setup_local_database(&register_name)?;
@@ -476,7 +498,7 @@ fn main() -> std::io::Result<()> {
         std::process::exit(0);
     } else {
         let handle = thread::spawn(|| {
-            compile_maven().unwrap();
+            compile_maven().expect("Failed to compile Maven");
         });
         clean_local_credentials()?;
         setup_external_database(&*register_name)?;
