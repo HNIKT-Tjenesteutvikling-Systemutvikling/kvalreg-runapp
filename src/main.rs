@@ -74,9 +74,10 @@ fn clean_up(register_name: &str) -> io::Result<()> {
 
         let home_dir = dirs::home_dir().expect("Home directory not found");
         let my_cnf_path = home_dir.join(".my.cnf");
+        let mysql_path = format!("{}/mysql", std::env::var("PWD").unwrap());
 
         remove_if_exists(my_cnf_path.to_str().unwrap())?;
-        remove_if_exists("mysql/.my.cnf")?;
+        remove_if_exists(&format!("{}/.my.cnf", mysql_path))?;
         remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
         remove_if_exists(&format!("target/{}.war", register_name))?;
         remove_if_exists(&format!("target/{}", register_name))?;
@@ -119,7 +120,9 @@ fn drop_database(register_name: &str) -> io::Result<()> {
     let home_dir = dirs::home_dir().expect("Home directory not found");
     let my_cnf_path = home_dir.join(".my.cnf");
     let catalina_home = env::var("CATALINA_HOME").unwrap();
-    remove_if_exists("mysql/data")?;
+    let mysql_path = format!("{}/mysql", std::env::var("PWD").unwrap());
+
+    remove_if_exists(&format!("{}/data", mysql_path))?;
     remove_if_exists(my_cnf_path.to_str().unwrap())?;
     remove_if_exists(&format!("{}/bin/src/*", catalina_home))?;
     remove_if_exists(&format!("{}/logs/*", catalina_home))?;
