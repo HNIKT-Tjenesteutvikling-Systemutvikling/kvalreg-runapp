@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::from_str;
 use std::env;
 use std::fs;
+use std::fs::remove_dir_all;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
@@ -28,10 +29,13 @@ fn remove_if_exists(path: &str) -> io::Result<()> {
         if path.is_dir() {
             for entry in fs::read_dir(path)? {
                 let entry = entry?;
-                if entry.path().is_file() {
+                if entry.path().is_dir() {
+                    remove_dir_all(entry.path())?;
+                } else if entry.path().is_file() {
                     fs::remove_file(entry.path())?;
                 }
             }
+            fs::remove_dir(path)?;
         } else {
             fs::remove_file(path)?;
         }
@@ -91,8 +95,12 @@ fn clean_up(register_name: &str) -> io::Result<()> {
             env::var("CATALINA_HOME").unwrap(),
             register_name
         ))?;
-        remove_if_exists(&format!("{}/bin/src/*", env::var("CATALINA_HOME").unwrap()))?;
-        remove_if_exists(&format!("{}/logs/*", env::var("CATALINA_HOME").unwrap()))?;
+        remove_if_exists(&format!("{}/bin/src", env::var("CATALINA_HOME").unwrap()))?;
+        remove_if_exists(&format!("{}/logs", env::var("CATALINA_HOME").unwrap()))?;
+        remove_if_exists(&format!(
+            "{}/compile_log.txt",
+            env::var("CATALINA_HOME").unwrap()
+        ))?;
         remove_if_exists("jdk/*")?;
         remove_if_exists("logs/*")?;
 
@@ -139,11 +147,18 @@ fn clean_local_credentials() -> std::io::Result<()> {
     let my_cnf_path = home_dir.join(".my.cnf");
     let mysql_my_cnf_path = Path::new("mysql/.my.cnf");
     let mvn_compile_log_path = Path::new("tomcat/compile_log.txt");
+    let catalina_logs_path = env::var("CATALINA_HOME")
+        .map(|path| Path::new(&path).join("logs"))
+        .unwrap();
+
     println!("{}", my_cnf_path.to_str().unwrap());
     println!("{}", "Cleaning up mysql credentials...".yellow());
     remove_if_exists(my_cnf_path.to_str().unwrap())?;
     remove_if_exists(mysql_my_cnf_path.to_str().unwrap())?;
     remove_if_exists(mvn_compile_log_path.to_str().unwrap())?;
+    if !catalina_logs_path.exists() {
+        fs::create_dir_all(catalina_logs_path)?;
+    }
 
     Ok(())
 }
