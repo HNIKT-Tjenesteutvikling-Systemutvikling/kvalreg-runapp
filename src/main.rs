@@ -372,6 +372,20 @@ fn compile_maven() -> Result<(), String> {
     Ok(())
 }
 
+fn check_port_8080() {
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg("lsof -i :8080 | grep LISTEN")
+        .output()
+        .expect("Failed to execute command");
+
+    if !output.stdout.is_empty() {
+        println!("{}", "Port 8080 is in use by the following process:".red());
+        println!("{}", String::from_utf8_lossy(&output.stdout));
+        panic!("Cannot start Tomcat because port 8080 is in use.");
+    }
+}
+
 fn start_tomcat(register_name: &str) -> std::io::Result<()> {
     println!("{}", "Local environment detected...".bright_blue());
     println!("{}", "Setting up Tomcat...".yellow());
@@ -464,6 +478,8 @@ fn main() -> std::io::Result<()> {
     let register_name = Arc::new(register.register_name);
 
     if let Some(_matches) = matches.subcommand_matches("local") {
+        println!("{}", "Checking if port 8080 is in use...".yellow());
+        check_port_8080();
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat")
             .status()
@@ -477,6 +493,8 @@ fn main() -> std::io::Result<()> {
         handle.join().unwrap();
         start_tomcat(&*register_name)?;
     } else if let Some(_matches) = matches.subcommand_matches("code") {
+        println!("{}", "Checking if port 8080 is in use...".yellow());
+        check_port_8080();
         println!("{}", "Stopping running services...".red());
         Command::new("stop_tomcat")
             .status()
