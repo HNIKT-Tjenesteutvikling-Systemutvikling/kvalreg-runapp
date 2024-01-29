@@ -44,10 +44,25 @@ fn remove_if_exists(path: &str) -> io::Result<()> {
 }
 
 fn clean_up(register_name: &str) -> io::Result<()> {
-    println!("{}", "Cleaning up and stopping services...".bright_blue());
-    Command::new("stop_tomcat")
-        .status()
-        .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
+    println!("{}", "Cleaning up and stopping services...".yellow());
+    let result = Command::new("sh")
+        .arg("-c")
+        .arg("stop_tomcat 2>/dev/null")
+        .status();
+
+    match result {
+        Ok(status) => {
+            if !status.success() {
+                println!("{}", "Tomcat not running. Continuing...".yellow());
+            }
+        }
+        Err(_) => {
+            return Err(io::Error::new(
+                io::ErrorKind::Other,
+                "Failed to execute command",
+            ));
+        }
+    }
 
     Command::new("docker-compose")
         .arg("down")
@@ -481,7 +496,9 @@ fn main() -> std::io::Result<()> {
         println!("{}", "Checking if port 8080 is in use...".yellow());
         check_port_8080();
         println!("{}", "Stopping running services...".red());
-        Command::new("stop_tomcat")
+        Command::new("sh")
+            .arg("-c")
+            .arg("stop_tomcat 2>/dev/null")
             .status()
             .expect("Failed to execute command");
         let handle = thread::spawn(|| {
@@ -496,7 +513,9 @@ fn main() -> std::io::Result<()> {
         println!("{}", "Checking if port 8080 is in use...".yellow());
         check_port_8080();
         println!("{}", "Stopping running services...".red());
-        Command::new("stop_tomcat")
+        Command::new("sh")
+            .arg("-c")
+            .arg("stop_tomcat 2>/dev/null")
             .status()
             .expect("Failed to execute command");
         let handle = thread::spawn(|| {
