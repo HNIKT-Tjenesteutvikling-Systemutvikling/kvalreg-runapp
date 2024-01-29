@@ -72,10 +72,11 @@ fn clean_up(register_name: &str) -> io::Result<()> {
     println!("{}", "Cleaning up and stopping MySQL...".yellow());
     if fs::metadata("mysql/data").is_ok() {
         if fs::metadata("mysql/socket.lock").is_ok() {
-            Command::new("stop_mysql")
+            Command::new("sh")
+                .arg("-c")
+                .arg("stop_mysql >/dev/null 2>&1")
                 .status()
                 .map_err(|_| io::Error::new(io::ErrorKind::Other, "Failed to execute command"))?;
-
             let output = Command::new("pgrep")
                 .arg("mysqld")
                 .output()
