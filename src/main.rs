@@ -101,6 +101,11 @@ fn clean_up(register_name: &str) -> io::Result<()> {
         remove_if_exists(&format!("{}/.my.cnf", env::var("HOME").unwrap()))?;
         remove_if_exists(&format!("target/{}.war", register_name))?;
         remove_if_exists(&format!("target/{}", register_name))?;
+        remove_if_exists(&format!("target/war"))?;
+        remove_if_exists(&format!("target/classes"))?;
+        remove_if_exists(&format!("target/generated-sources"))?;
+        remove_if_exists(&format!("target/maven-archiver"))?;
+        remove_if_exists(&format!("target/maven-status"))?;
         remove_if_exists(&format!(
             "{}/webapps/{}.war",
             env::var("CATALINA_HOME").unwrap(),
