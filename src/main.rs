@@ -352,16 +352,12 @@ fn compile_maven() -> Result<(), String> {
         println!("{}", "No target directory found...".red());
     }
 
-    let mvn_command = if target_exists {
-        "package"
-    } else {
-        "clean install"
-    };
+    let mvn_command = if target_exists { "package" } else { "install" };
 
     let file = File::create("tomcat/compile_log.txt").map_err(|e| e.to_string())?;
 
     let status = Command::new("mvn")
-        .args(&[mvn_command, "-DskipTests"])
+        .args(&["clean", mvn_command, "-DskipTests"])
         .stdout(Stdio::from(file))
         .status()
         .map_err(|e| e.to_string())?;
