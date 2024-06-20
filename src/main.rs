@@ -124,6 +124,7 @@ fn clean_up(register_name: &str) -> io::Result<()> {
         ))?;
         remove_if_exists("jdk/*")?;
         remove_if_exists("logs/*")?;
+        remove_if_exists("overlays/*")?;
 
         println!("{}", "Stopped running processes".red());
     } else {
