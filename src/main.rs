@@ -480,6 +480,7 @@ fn main() -> std::io::Result<()> {
         .subcommand(App::new("local").about("Sets up local environment"))
         .subcommand(App::new("code").about("Sets up environment for VScode"))
         .subcommand(App::new("docker").about("Sets up environment for Docker"))
+        .subcommand(App::new("test").about("Sets up environment for testing"))
         .subcommand(App::new("clean").about("Cleans up and stops services"))
         .subcommand(App::new("drop").about("Cleans up, stops services and drops database"))
         .get_matches();
@@ -547,6 +548,13 @@ fn main() -> std::io::Result<()> {
             .arg(format!("{}:latest", &*register_name))
             .status()
             .expect("Failed to execute command");
+    } else if let Some(_matches) = matches.subcommand_matches("test") {
+        let handle = thread::spawn(|| {
+            compile_maven().expect("Failed to compile Maven");
+        });
+        handle.join().unwrap();
+        copy_db_files().unwrap();
+        start_tomcat(&*register_name)?;
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
         clean_up(&*register_name)?;
         std::process::exit(0);
