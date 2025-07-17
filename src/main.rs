@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 use std::str;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 extern crate dirs;
 
