@@ -487,7 +487,7 @@ fn format_duration(duration: Duration) -> String {
 }
 
 fn exit_timestamp(start_time: Instant) {
-    let end_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+    let end_timestamp = Local::now().format("%d-%m-%Y %H:%M:%S").to_string();
     let duration = Instant::now().duration_since(start_time);
     
     println!("{}", format!("\n--------------------------------------------------").bright_green());
@@ -498,7 +498,6 @@ fn exit_timestamp(start_time: Instant) {
 
 fn main() -> std::io::Result<()> {
     let start_time = Instant::now();
-    let start_timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     
     let matches = App::new("runapp")
         .version("1.0")
