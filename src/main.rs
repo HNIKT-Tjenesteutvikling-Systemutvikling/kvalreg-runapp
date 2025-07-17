@@ -1,4 +1,5 @@
 use clap::App;
+use chrono::Local;
 use colored::*;
 use serde::Deserialize;
 use serde_json::from_str;
@@ -13,7 +14,7 @@ use std::process::{Command, Stdio};
 use std::str;
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 extern crate dirs;
 
@@ -472,7 +473,32 @@ fn copy_db_files() -> std::io::Result<()> {
     Ok(())
 }
 
+fn format_duration(duration: Duration) -> String {
+    let total_secs = duration.as_secs();
+    let minutes = total_secs / 60;
+    let seconds = total_secs % 60;
+    let millis = duration.subsec_millis();
+    
+    if minutes > 0 {
+        format!("{}m {}s {}ms", minutes, seconds, millis)
+    } else {
+        format!("{}s {}ms", seconds, millis)
+    }
+}
+
+fn exit_timestamp(start_time: Instant) {
+    let end_timestamp = Local::now().format("%d-%m-%Y %H:%M:%S").to_string();
+    let duration = Instant::now().duration_since(start_time);
+    
+    println!("{}", format!("\n--------------------------------------------------").bright_green());
+    println!("{}", format!("   Application finished at: {}", end_timestamp).bright_green());
+    println!("{}", format!("   Total execution time: {}", format_duration(duration)).bright_green());
+    println!("{}", format!("--------------------------------------------------").bright_green());
+}
+
 fn main() -> std::io::Result<()> {
+    let start_time = Instant::now();
+    
     let matches = App::new("runapp")
         .version("1.0")
         .author("Gako358 <gako358@outlook.com>")
@@ -557,10 +583,12 @@ fn main() -> std::io::Result<()> {
         start_tomcat(&*register_name)?;
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
         clean_up(&*register_name)?;
+        exit_timestamp(start_time);
         std::process::exit(0);
     } else if let Some(_matches) = matches.subcommand_matches("drop") {
         clean_up(&*register_name)?;
         drop_database(&*register_name)?;
+        exit_timestamp(start_time);
         std::process::exit(0);
     } else {
         let handle = thread::spawn(|| {
@@ -571,6 +599,8 @@ fn main() -> std::io::Result<()> {
         handle.join().unwrap();
         copy_db_files().unwrap();
     }
+
+    exit_timestamp(start_time);
 
     Ok(())
 }
