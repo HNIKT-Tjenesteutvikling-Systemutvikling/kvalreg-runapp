@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: dessant/issue-states@v3
         with:
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          github-token: ${{ secrets.KVALREG_WORKFLOW }}
           open-issue-columns: ''
           closed-issue-columns: 'Closed, Done'
           log-output: false

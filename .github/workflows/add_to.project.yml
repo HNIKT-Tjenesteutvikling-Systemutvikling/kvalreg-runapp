@@ -15,6 +15,6 @@ jobs:
           # You can target a project in a different organization
           # to the issue
           project-url: https://github.com/orgs/HNIKT-Tjenesteutvikling-Systemutvikling/projects/17
-          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
+          github-token: ${{ secrets.KVALREG_WORKFLOW }}
           labeled: bug, enhancement, task
           label-operator: OR
