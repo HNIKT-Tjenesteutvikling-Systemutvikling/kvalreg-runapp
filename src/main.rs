@@ -582,6 +582,7 @@ fn main() -> std::io::Result<()> {
         .version("1.0")
         .author("Gako358 <gako358@outlook.com>")
         .about("Sets up environment for running the application")
+        .arg(services_flag.clone())
         .subcommand(
             App::new("local")
                 .about("Sets up local environment")
@@ -717,6 +718,9 @@ fn main() -> std::io::Result<()> {
         setup_external_database(&*register_name)?;
         handle.join().unwrap();
         copy_db_files().unwrap();
+        if matches.is_present("services") {
+            start_services()?;
+        }
     }
 
     exit_timestamp(start_time);
