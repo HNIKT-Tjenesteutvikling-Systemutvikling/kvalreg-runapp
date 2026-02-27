@@ -1,5 +1,6 @@
-use clap::App;
 use chrono::Local;
+use clap::App;
+use clap::Arg;
 use colored::*;
 use serde::Deserialize;
 use serde_json::from_str;
@@ -43,6 +44,66 @@ fn remove_if_exists(path: &str) -> io::Result<()> {
     }
     Ok(())
 }
+
+fn start_services() -> io::Result<()> {
+    println!("{}", "Starting authorization server...".bright_blue());
+    let auth_status = Command::new("auth-server-run").status();
+    match auth_status {
+        Ok(s) if s.success() => println!("{}", "Authorization server started.".green()),
+        Ok(_) => println!(
+            "{}",
+            "Authorization server may already be running.".yellow()
+        ),
+        Err(e) => {
+            eprintln!("{}", format!("Failed to start auth server: {}", e).red());
+            return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
+        }
+    }
+
+    // Give the auth server a moment to bind its port before PDP connects
+    thread::sleep(Duration::from_secs(2));
+
+    println!("{}", "Starting PDP container...".bright_blue());
+    let pdp_status = Command::new("pdp-docker-run").status();
+    match pdp_status {
+        Ok(s) if s.success() => println!("{}", "PDP container started.".green()),
+        Ok(_) => println!("{}", "PDP container may already be running.".yellow()),
+        Err(e) => {
+            eprintln!("{}", format!("Failed to start PDP: {}", e).red());
+            return Err(io::Error::new(io::ErrorKind::Other, e.to_string()));
+        }
+    }
+
+    println!("{}", "\nServices started:".bright_green());
+    println!("  auth-server  — running in background (logs: auth-server-logs)");
+    println!("  pdp          — running in Docker      (logs: pdp-docker-logs)");
+
+    Ok(())
+}
+
+fn stop_services() -> io::Result<()> {
+    println!("{}", "Stopping PDP container...".yellow());
+    let pdp_status = Command::new("pdp-docker-stop").status();
+    match pdp_status {
+        Ok(s) if s.success() => println!("{}", "PDP container stopped.".green()),
+        Ok(_) => println!("{}", "PDP container was not running.".yellow()),
+        Err(e) => eprintln!("{}", format!("Failed to stop PDP: {}", e).red()),
+    }
+
+    println!("{}", "Stopping authorization server...".yellow());
+    let auth_status = Command::new("auth-server-stop").status();
+    match auth_status {
+        Ok(s) if s.success() => println!("{}", "Authorization server stopped.".green()),
+        Ok(_) => println!("{}", "Authorization server was not running.".yellow()),
+        Err(e) => eprintln!("{}", format!("Failed to stop auth server: {}", e).red()),
+    }
+
+    println!("{}", "\nAll services stopped.".bright_green());
+
+    Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 fn clean_up(register_name: &str) -> io::Result<()> {
     println!("{}", "Cleaning up and stopping services...".yellow());
@@ -478,7 +539,7 @@ fn format_duration(duration: Duration) -> String {
     let minutes = total_secs / 60;
     let seconds = total_secs % 60;
     let millis = duration.subsec_millis();
-    
+
     if minutes > 0 {
         format!("{}m {}s {}ms", minutes, seconds, millis)
     } else {
@@ -489,26 +550,62 @@ fn format_duration(duration: Duration) -> String {
 fn exit_timestamp(start_time: Instant) {
     let end_timestamp = Local::now().format("%d-%m-%Y %H:%M:%S").to_string();
     let duration = Instant::now().duration_since(start_time);
-    
-    println!("{}", format!("\n--------------------------------------------------").bright_green());
-    println!("{}", format!("   Application finished at: {}", end_timestamp).bright_green());
-    println!("{}", format!("   Total execution time: {}", format_duration(duration)).bright_green());
-    println!("{}", format!("--------------------------------------------------").bright_green());
+
+    println!(
+        "{}",
+        "\n--------------------------------------------------".bright_green()
+    );
+    println!(
+        "{}",
+        format!("   Application finished at: {}", end_timestamp).bright_green()
+    );
+    println!(
+        "{}",
+        format!("   Total execution time: {}", format_duration(duration)).bright_green()
+    );
+    println!(
+        "{}",
+        "--------------------------------------------------".bright_green()
+    );
 }
 
 fn main() -> std::io::Result<()> {
     let start_time = Instant::now();
-    
+
+    let services_flag = Arg::new("services")
+        .short('s')
+        .long("services")
+        .takes_value(false)
+        .help("Also start auth-server and PDP after the main setup");
+
     let matches = App::new("runapp")
         .version("1.0")
         .author("Gako358 <gako358@outlook.com>")
         .about("Sets up environment for running the application")
-        .subcommand(App::new("local").about("Sets up local environment"))
-        .subcommand(App::new("code").about("Sets up environment for VScode"))
-        .subcommand(App::new("docker").about("Sets up environment for Docker"))
-        .subcommand(App::new("test").about("Sets up environment for testing"))
+        .subcommand(
+            App::new("local")
+                .about("Sets up local environment")
+                .arg(services_flag.clone()),
+        )
+        .subcommand(
+            App::new("code")
+                .about("Sets up environment for VScode")
+                .arg(services_flag.clone()),
+        )
+        .subcommand(
+            App::new("docker")
+                .about("Sets up environment for Docker")
+                .arg(services_flag.clone()),
+        )
+        .subcommand(
+            App::new("test")
+                .about("Sets up environment for testing")
+                .arg(services_flag.clone()),
+        )
         .subcommand(App::new("clean").about("Cleans up and stops services"))
         .subcommand(App::new("drop").about("Cleans up, stops services and drops database"))
+        .subcommand(App::new("services-start").about("Start auth-server and PDP container"))
+        .subcommand(App::new("services-stop").about("Stop auth-server and PDP container"))
         .get_matches();
 
     let output = Command::new("nix-instantiate")
@@ -522,7 +619,7 @@ fn main() -> std::io::Result<()> {
     let register: Register = from_str(output_str).expect("Failed to parse JSON");
     let register_name = Arc::new(register.register_name);
 
-    if let Some(_matches) = matches.subcommand_matches("local") {
+    if let Some(matches) = matches.subcommand_matches("local") {
         println!("{}", "Checking if port 8080 is in use...".yellow());
         check_port_8080();
         println!("{}", "Stopping running services...".red());
@@ -539,7 +636,10 @@ fn main() -> std::io::Result<()> {
         start_database(&register_name)?;
         handle.join().unwrap();
         start_tomcat(&*register_name)?;
-    } else if let Some(_matches) = matches.subcommand_matches("code") {
+        if matches.is_present("services") {
+            start_services()?;
+        }
+    } else if let Some(matches) = matches.subcommand_matches("code") {
         println!("{}", "Checking if port 8080 is in use...".yellow());
         check_port_8080();
         println!("{}", "Stopping running services...".red());
@@ -555,7 +655,10 @@ fn main() -> std::io::Result<()> {
         setup_external_database(&*register_name)?;
         handle.join().unwrap();
         start_tomcat(&*register_name)?;
-    } else if let Some(_matches) = matches.subcommand_matches("docker") {
+        if matches.is_present("services") {
+            start_services()?;
+        }
+    } else if let Some(matches) = matches.subcommand_matches("docker") {
         println!("{}", "Stopping running services...".red());
         Command::new("docker-compose")
             .arg("down")
@@ -574,20 +677,36 @@ fn main() -> std::io::Result<()> {
             .arg(format!("{}:latest", &*register_name))
             .status()
             .expect("Failed to execute command");
-    } else if let Some(_matches) = matches.subcommand_matches("test") {
+        if matches.is_present("services") {
+            start_services()?;
+        }
+    } else if let Some(matches) = matches.subcommand_matches("test") {
         let handle = thread::spawn(|| {
             compile_maven().expect("Failed to compile Maven");
         });
         handle.join().unwrap();
         copy_db_files().unwrap();
         start_tomcat(&*register_name)?;
+        if matches.is_present("services") {
+            start_services()?;
+        }
     } else if let Some(_matches) = matches.subcommand_matches("clean") {
+        stop_services()?;
         clean_up(&*register_name)?;
         exit_timestamp(start_time);
         std::process::exit(0);
     } else if let Some(_matches) = matches.subcommand_matches("drop") {
+        stop_services()?;
         clean_up(&*register_name)?;
         drop_database(&*register_name)?;
+        exit_timestamp(start_time);
+        std::process::exit(0);
+    } else if let Some(_matches) = matches.subcommand_matches("services-start") {
+        start_services()?;
+        exit_timestamp(start_time);
+        std::process::exit(0);
+    } else if let Some(_matches) = matches.subcommand_matches("services-stop") {
+        stop_services()?;
         exit_timestamp(start_time);
         std::process::exit(0);
     } else {
