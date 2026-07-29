@@ -14,3 +14,7 @@ target/
 
 /target
 result
+
+# Nix / direnv
+.direnv
+.pre-commit-config.yaml
